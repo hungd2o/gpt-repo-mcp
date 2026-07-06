@@ -227,4 +227,38 @@ describe("RepoTreeService", () => {
     expect(result.entries.some((e) => e.path === "src")).toBe(true);
     expect(result.warnings).toEqual([]);
   });
+
+  test("truncates warnings when many directories are inaccessible", async () => {
+    if (process.platform === "win32") {
+      return; // chmod(000) is not meaningful on Windows
+    }
+
+    const fixture = await createRepoFixture();
+    // Create 105 inaccessible directories to exceed the 100-warning cap
+    for (let i = 0; i < 105; i++) {
+      const dir = join(fixture.root, "bad", `d${i}`);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "f.txt"), "x");
+      await chmod(dir, 0o000);
+    }
+
+    const sandbox = new PathSandbox(fixture.root);
+    let result;
+    try {
+      result = await new RepoTreeService(fixture.root, sandbox).tree({ include_files: true });
+    } finally {
+      for (let i = 0; i < 105; i++) {
+        await chmod(join(fixture.root, "bad", `d${i}`), 0o755);
+      }
+    }
+
+    // inaccessible count should reflect ALL skipped directories
+    expect(result.excluded_summary.inaccessible).toBeGreaterThanOrEqual(105);
+    // warnings array should be capped (100 real + 1 truncation message)
+    expect(result.warnings.length).toBeLessThanOrEqual(101);
+    // last warning should be the truncation notice
+    const last = result.warnings[result.warnings.length - 1];
+    expect(last.code).toBe("TRUNCATED");
+    expect(last.message).toMatch(/\[truncated\] \d+ more warnings omitted/);
+  });
 });

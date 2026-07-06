@@ -1,9 +1,12 @@
-import { readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
+import { join } from "node:path";
 import { DEFAULT_LIMITS } from "../policies/limits.js";
 import { RepoReaderError } from "../runtime/errors.js";
 import { IgnoreEngine, loadRepoMcpIgnorePatterns } from "./ignore-engine.js";
 import { PathSandbox, validateRepoPath } from "./path-sandbox.js";
+
+const MAX_WARNINGS = 100;
 
 export type TreeOptions = {
   path?: string;
@@ -46,6 +49,14 @@ function isSkippableFsError(err: unknown): boolean {
   return ["EACCES", "EPERM", "ENOENT", "ENOTDIR", "ELOOP", "EBUSY"].includes(code as string);
 }
 
+function pushWarning(warnings: WarningEntry[], entry: WarningEntry, overflowCount: { value: number }): void {
+  if (warnings.length < MAX_WARNINGS) {
+    warnings.push(entry);
+  } else {
+    overflowCount.value += 1;
+  }
+}
+
 export class RepoTreeService {
   constructor(private readonly root: string, private readonly sandbox: PathSandbox) {}
 
@@ -59,6 +70,7 @@ export class RepoTreeService {
     const entries: Array<{ path: string; type: "file" | "directory" | "nested_repo" | "submodule"; size_bytes?: number }> = [];
     const excludedSummary: Record<string, number> = {};
     const warnings: WarningEntry[] = [];
+    const warningOverflow = { value: 0 };
 
     const repoPatterns = await loadRepoMcpIgnorePatterns(this.root);
     const ignoreEngine = new IgnoreEngine(repoPatterns);
@@ -85,86 +97,122 @@ export class RepoTreeService {
       return true;
     };
 
-    const walk = async (repoPath: string, depth: number): Promise<void> => {
+    const walk = async (repoPath: string, depth: number, dirent?: Dirent): Promise<void> => {
       if (depth > maxDepth) {
         return;
       }
 
-      const resolved = await this.resolveForTree(repoPath, excludedSummary, warnings);
-      if (!resolved) {
+      // Determine entry type from Dirent when available to avoid redundant lstat calls.
+      // For symlinks or the initial root entry (no dirent), fall back to the full resolve path.
+      const isDir = dirent ? dirent.isDirectory() : undefined;
+      const isFile = dirent ? dirent.isFile() : undefined;
+      const isSymlink = dirent ? dirent.isSymbolicLink() : true; // assume symlink if unknown
+
+      // Symlinks and the root entry need full resolve for sandbox escape detection.
+      if (isSymlink || (!isDir && !isFile)) {
+        const resolved = await this.resolveForTree(repoPath, excludedSummary, warnings, warningOverflow);
+        if (!resolved) {
+          return;
+        }
+        const boundary = await this.sandbox.classifyBoundary(repoPath);
+        if (boundary.kind !== "normal" && repoPath !== ".") {
+          entries.push({ path: boundary.path, type: boundary.kind });
+          return;
+        }
+        if (resolved.stat.isDirectory()) {
+          await walkDirectory(repoPath, depth, resolved.absolutePath);
+        } else if (includeFiles && resolved.stat.isFile()) {
+          entries.push({ path: repoPath, type: "file", size_bytes: Number(resolved.stat.size) });
+        }
         return;
       }
-      const boundary = await this.sandbox.classifyBoundary(repoPath);
-      if (boundary.kind !== "normal" && repoPath !== ".") {
-        entries.push({ path: boundary.path, type: boundary.kind });
-        return;
-      }
-      if (resolved.stat.isDirectory()) {
-        if (depth >= maxDepth && repoPath !== ".") {
-          const read = await safeReadDir(resolved.absolutePath, repoPath);
-          if (!read.ok) {
-            warnings.push({ path: read.skipped.path, code: read.skipped.reason, message: "Skipped inaccessible directory" });
+
+      if (isDir) {
+        const boundary = await this.sandbox.classifyBoundary(repoPath);
+        if (boundary.kind !== "normal" && repoPath !== ".") {
+          entries.push({ path: boundary.path, type: boundary.kind });
+          return;
+        }
+        const absPath = join(this.root, repoPath);
+        await walkDirectory(repoPath, depth, absPath);
+      } else if (isFile && includeFiles) {
+        // We still need lstat for size_bytes on files.
+        try {
+          const absPath = join(this.root, repoPath);
+          const stat = await lstat(absPath);
+          entries.push({ path: repoPath, type: "file", size_bytes: Number(stat.size) });
+        } catch (err: unknown) {
+          if (isSkippableFsError(err)) {
+            const code = (typeof err === "object" && err !== null && "code" in err ? (err as { code?: string }).code : undefined) ?? "UNKNOWN_FS_ERROR";
+            pushWarning(warnings, { path: repoPath, code, message: "Skipped inaccessible path" }, warningOverflow);
             excludedSummary.inaccessible = (excludedSummary.inaccessible ?? 0) + 1;
             return;
           }
-          const hasVisibleBoundaryChild = read.entries.some((child) => {
-            const childRepoPath = repoPath === "." ? child.name : `${repoPath}/${child.name}`;
-            return isVisibleBoundaryChild(child, childRepoPath);
-          });
-          if (hasVisibleBoundaryChild) {
-            entries.push({ path: repoPath, type: "directory" });
-          }
-          return;
+          throw err;
         }
+      }
+    };
 
-        const read = await safeReadDir(resolved.absolutePath, repoPath);
+    const walkDirectory = async (repoPath: string, depth: number, absPath: string): Promise<void> => {
+      if (depth >= maxDepth && repoPath !== ".") {
+        const read = await safeReadDir(absPath, repoPath);
         if (!read.ok) {
-          warnings.push({ path: read.skipped.path, code: read.skipped.reason, message: "Skipped inaccessible directory" });
+          pushWarning(warnings, { path: read.skipped.path, code: read.skipped.reason, message: "Skipped inaccessible directory" }, warningOverflow);
           excludedSummary.inaccessible = (excludedSummary.inaccessible ?? 0) + 1;
           return;
         }
-
-        const countBefore = entries.length;
-
-        for (const child of read.entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        const hasVisibleBoundaryChild = read.entries.some((child) => {
           const childRepoPath = repoPath === "." ? child.name : `${repoPath}/${child.name}`;
-          if (ignoreEngine.isSensitiveCandidate(childRepoPath)) {
-            excludedSummary.secret_candidates = (excludedSummary.secret_candidates ?? 0) + 1;
-            continue;
-          }
-          const isDependency = isDependencyPath(childRepoPath);
-          const isGenerated = isGeneratedPath(childRepoPath);
-          if (isDependency && !options.include_dependencies) {
-            excludedSummary.dependencies = (excludedSummary.dependencies ?? 0) + 1;
-            excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
-            continue;
-          }
-          if (isGenerated && !options.include_generated) {
-            excludedSummary.generated = (excludedSummary.generated ?? 0) + 1;
-            excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
-            continue;
-          }
-          const includedByFlag = (isDependency && options.include_dependencies) || (isGenerated && options.include_generated);
-          if (respectDefaultExcludes && !includedByFlag && ignoreEngine.isIgnored(childRepoPath)) {
-            excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
-            continue;
-          }
-          await walk(childRepoPath, depth + 1);
-        }
-
-        // Emit the directory entry only after recursion so that directories whose
-        // entire subtree is filtered out (e.g. by "artifacts/**") are omitted.
-        // Negation patterns like "!artifacts/keep.txt" are handled correctly because
-        // any re-included descendant will have been pushed to entries above,
-        // causing entries.length > countBefore and the directory to be emitted.
-        if (repoPath !== "." && entries.length > countBefore) {
+          return isVisibleBoundaryChild(child, childRepoPath);
+        });
+        if (hasVisibleBoundaryChild) {
           entries.push({ path: repoPath, type: "directory" });
         }
-
         return;
       }
-      if (includeFiles && resolved.stat.isFile()) {
-        entries.push({ path: repoPath, type: "file", size_bytes: Number(resolved.stat.size) });
+
+      const read = await safeReadDir(absPath, repoPath);
+      if (!read.ok) {
+        pushWarning(warnings, { path: read.skipped.path, code: read.skipped.reason, message: "Skipped inaccessible directory" }, warningOverflow);
+        excludedSummary.inaccessible = (excludedSummary.inaccessible ?? 0) + 1;
+        return;
+      }
+
+      const countBefore = entries.length;
+
+      for (const child of read.entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        const childRepoPath = repoPath === "." ? child.name : `${repoPath}/${child.name}`;
+        if (ignoreEngine.isSensitiveCandidate(childRepoPath)) {
+          excludedSummary.secret_candidates = (excludedSummary.secret_candidates ?? 0) + 1;
+          continue;
+        }
+        const isDependency = isDependencyPath(childRepoPath);
+        const isGenerated = isGeneratedPath(childRepoPath);
+        if (isDependency && !options.include_dependencies) {
+          excludedSummary.dependencies = (excludedSummary.dependencies ?? 0) + 1;
+          excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
+          continue;
+        }
+        if (isGenerated && !options.include_generated) {
+          excludedSummary.generated = (excludedSummary.generated ?? 0) + 1;
+          excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
+          continue;
+        }
+        const includedByFlag = (isDependency && options.include_dependencies) || (isGenerated && options.include_generated);
+        if (respectDefaultExcludes && !includedByFlag && ignoreEngine.isIgnored(childRepoPath)) {
+          excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
+          continue;
+        }
+        await walk(childRepoPath, depth + 1, child);
+      }
+
+      // Emit the directory entry only after recursion so that directories whose
+      // entire subtree is filtered out (e.g. by "artifacts/**") are omitted.
+      // Negation patterns like "!artifacts/keep.txt" are handled correctly because
+      // any re-included descendant will have been pushed to entries above,
+      // causing entries.length > countBefore and the directory to be emitted.
+      if (repoPath !== "." && entries.length > countBefore) {
+        entries.push({ path: repoPath, type: "directory" });
       }
     };
 
@@ -173,6 +221,11 @@ export class RepoTreeService {
     const pagedEntries = entries.slice(cursor, cursor + pageSize);
     const nextIndex = cursor + pagedEntries.length;
     const truncated = nextIndex < entries.length;
+
+    if (warningOverflow.value > 0) {
+      warnings.push({ path: "", code: "TRUNCATED", message: `[truncated] ${warningOverflow.value} more warnings omitted` });
+    }
+
     return {
       entries: pagedEntries,
       warnings,
@@ -185,7 +238,8 @@ export class RepoTreeService {
   private async resolveForTree(
     repoPath: string,
     excludedSummary: Record<string, number>,
-    warnings: WarningEntry[]
+    warnings: WarningEntry[],
+    warningOverflow: { value: number }
   ): Promise<Awaited<ReturnType<PathSandbox["resolve"]>> | undefined> {
     try {
       return await this.sandbox.resolve(repoPath);
@@ -196,7 +250,7 @@ export class RepoTreeService {
       }
       if (isSkippableFsError(error)) {
         const code = (typeof error === "object" && error !== null && "code" in error ? (error as { code?: string }).code : undefined) ?? "UNKNOWN_FS_ERROR";
-        warnings.push({ path: repoPath, code, message: "Skipped inaccessible path" });
+        pushWarning(warnings, { path: repoPath, code, message: "Skipped inaccessible path" }, warningOverflow);
         excludedSummary.inaccessible = (excludedSummary.inaccessible ?? 0) + 1;
         return undefined;
       }
