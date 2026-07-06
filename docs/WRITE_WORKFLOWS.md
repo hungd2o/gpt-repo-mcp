@@ -13,7 +13,7 @@ Writes are disabled by default. A repository must opt in through `config.local.j
 Copy `config.example.json` to `config.local.json` to create a valid empty starter config, then add repositories and opt in only where writes are intended:
 
 ```bash
-cp config.example.json config.local.json
+npm run setup:config
 ```
 
 For normal local setup, prefer the CLI modes:

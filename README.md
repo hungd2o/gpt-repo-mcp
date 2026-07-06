@@ -40,7 +40,7 @@ git clone https://github.com/CAHN91/gpt-repo-mcp.git
 cd gpt-repo-mcp
 npm install
 npm run build
-cp config.example.json config.local.json
+npm run setup:config
 ```
 
 ### 2. Add Your Repo

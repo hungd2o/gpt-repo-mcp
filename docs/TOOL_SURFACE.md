@@ -705,7 +705,7 @@ Create a ChatGPT handoff:
 Run the local server against a config file:
 
 ```bash
-GPT_REPO_CONFIG=./config.local.json npm run dev
+npm run mcp
 ```
 
 In another shell, inspect the Streamable HTTP endpoint:

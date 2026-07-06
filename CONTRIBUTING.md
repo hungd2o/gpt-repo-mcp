@@ -4,7 +4,7 @@
 
 ```bash
 npm install
-cp config.example.json config.local.json
+npm run setup:config
 ```
 
 ## Checks

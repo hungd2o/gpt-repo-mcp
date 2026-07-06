@@ -56,14 +56,14 @@ async function ensureConfigExists(configPath) {
   try {
     await access(configPath, constants.F_OK);
   } catch {
-    globalThis.console.error(`Missing ${configPath}. Run: cp config.example.json ${configPath}`);
+    globalThis.console.error(`Missing ${configPath}. Run: npm run setup:config`);
     process.exit(1);
   }
 }
 
 function ensureRequiredEnv(name) {
   if (!process.env[name]) {
-    globalThis.console.error(`Missing ${name}. Add it to .env or export it before running npm run connect:secure.`);
+    globalThis.console.error(`Missing ${name}. Add it to .env or set it in your shell before running npm run connect:secure.`);
     process.exit(1);
   }
 }

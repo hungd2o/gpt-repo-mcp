@@ -44,7 +44,7 @@ async function ensureConfigExists() {
   try {
     await access(CONFIG_PATH, constants.F_OK);
   } catch {
-    globalThis.console.error("Missing config.local.json. Run: cp config.example.json config.local.json");
+    globalThis.console.error("Missing config.local.json. Run: npm run setup:config");
     process.exit(1);
   }
 }
