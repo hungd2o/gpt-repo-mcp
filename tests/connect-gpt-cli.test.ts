@@ -402,7 +402,7 @@ describe("connect-gpt config CLI", () => {
 async function writeDoctorPackageJson(root: string): Promise<void> {
   await writeFile(join(root, "package.json"), JSON.stringify({
     scripts: {
-      mcp: "REPO_READER_CONFIG=./config.local.json PORT=8787 npm run dev",
+      mcp: "cross-env REPO_READER_CONFIG=./config.local.json PORT=8787 npm run dev",
       tunnel: "ngrok http 8787 --log=stdout",
       connect: "node scripts/connect-dev.mjs",
       build: "tsup src/server.ts",

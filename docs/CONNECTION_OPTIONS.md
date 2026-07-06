@@ -53,7 +53,7 @@ If you only need the local MCP server without a tunnel, run `npm run mcp`. It st
 
 OpenAI Secure MCP Tunnel is useful for longer-lived or private connector setups when your ChatGPT workspace supports MCP tunnels.
 
-Create `.env` with `cp .env.example .env`, then fill in your local tunnel settings:
+Create `.env` with `npm run setup:env`, then fill in your local tunnel settings:
 
 ```bash
 CONTROL_PLANE_API_KEY=

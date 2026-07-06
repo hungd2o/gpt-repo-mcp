@@ -9,6 +9,7 @@ describe("package startup scripts", () => {
     const raw = await readFile(join(process.cwd(), "package.json"), "utf8");
     const pkg = JSON.parse(raw) as {
       bin?: Record<string, string>;
+      devDependencies?: Record<string, string>;
       engines?: Record<string, string>;
       keywords?: string[];
       scripts?: Record<string, string>;
@@ -20,7 +21,9 @@ describe("package startup scripts", () => {
     expect(pkg.keywords).toEqual(
       expect.arrayContaining(["mcp", "chatgpt", "developer-tools", "repository", "local-first"])
     );
-    expect(pkg.scripts?.mcp).toBe("GPT_REPO_CONFIG=./config.local.json PORT=8787 npm run dev");
+    expect(pkg.scripts?.mcp).toBe("cross-env GPT_REPO_CONFIG=./config.local.json PORT=8787 npm run dev");
+    expect(pkg.scripts?.["setup:config"]).toBe("node --eval \"require('node:fs').copyFileSync('config.example.json', 'config.local.json')\"");
+    expect(pkg.scripts?.["setup:env"]).toBe("node --eval \"require('node:fs').copyFileSync('.env.example', '.env')\"");
     expect(pkg.scripts?.tunnel).toContain("--log=stdout");
     expect(pkg.scripts?.connect).toBe("node scripts/connect-dev.mjs");
     expect(pkg.scripts?.["connect:secure"]).toBe("node scripts/connect-secure.mjs");
@@ -28,6 +31,7 @@ describe("package startup scripts", () => {
     expect(pkg.scripts?.remove).toBe("node dist/cli/connect-gpt.js remove");
     expect(pkg.scripts?.list).toBe("node dist/cli/connect-gpt.js list");
     expect(pkg.scripts?.["check:config"]).toBe("node dist/cli/connect-gpt.js check");
+    expect(pkg.devDependencies?.["cross-env"]).toBe("^10.1.0");
   });
 
   test("includes connect runner script and ngrok URL hints", async () => {
@@ -152,7 +156,7 @@ describe("package startup scripts", () => {
     const workflows = await readFile(join(process.cwd(), "docs", "WRITE_WORKFLOWS.md"), "utf8");
 
     for (const doc of [readme, setup]) {
-      expect(doc).toContain("cp config.example.json config.local.json");
+      expect(doc).toContain("npm run setup:config");
       expect(doc).toContain("empty");
       expect(doc).toContain("npm run add -- /path/to/your/repo");
     }
