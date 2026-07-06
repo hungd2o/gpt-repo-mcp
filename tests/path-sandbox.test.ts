@@ -1,9 +1,10 @@
 import { mkdir, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { PathSandbox } from "../src/services/path-sandbox.js";
+import { safeRealpath } from "../src/services/fs-utils.js";
 
 describe("PathSandbox", () => {
   test("rejects absolute model-supplied paths", async () => {
@@ -45,5 +46,19 @@ describe("PathSandbox", () => {
     const result = await sandbox.classifyBoundary("vendor/lib");
 
     expect(result).toEqual({ kind: "nested_repo", path: "vendor/lib" });
+  });
+});
+
+describe("safeRealpath", () => {
+  test("returns the real path for an existing directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "repo-reader-"));
+    const result = await safeRealpath(root);
+    expect(result).toBe(resolve(root));
+  });
+
+  test("re-throws non-permission errors such as ENOENT", async () => {
+    await expect(safeRealpath(join(tmpdir(), "does-not-exist-xyzzy"))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
   });
 });

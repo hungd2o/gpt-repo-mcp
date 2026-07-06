@@ -1,11 +1,12 @@
 import ignore from "ignore";
 import { execFile } from "node:child_process";
-import { lstat, readdir, realpath, rm } from "node:fs/promises";
+import { lstat, readdir, rm } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { RepoReaderError } from "../runtime/errors.js";
 import { IgnoreEngine } from "./ignore-engine.js";
 import { validateRepoPath } from "./path-sandbox.js";
+import { safeRealpath } from "./fs-utils.js";
 import { OperationsPolicy } from "./operations-policy.js";
 
 const execFileAsync = promisify(execFile);
@@ -138,8 +139,8 @@ export class CleanupService {
 
 async function assertWithinRoot(root: string, target: string): Promise<void> {
   const [rootReal, targetReal] = await Promise.all([
-    realpath(root),
-    realpath(target)
+    safeRealpath(root),
+    safeRealpath(target)
   ]);
   const rel = relative(resolve(rootReal), resolve(targetReal));
   if (rel !== "" && (rel.startsWith("..") || rel.includes(`..${sep}`))) {
