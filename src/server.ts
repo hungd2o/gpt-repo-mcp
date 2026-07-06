@@ -16,6 +16,7 @@ import {
 const port = Number(process.env.PORT ?? 8787);
 const configPath = process.env.GPT_REPO_CONFIG ?? process.env.REPO_READER_CONFIG;
 const publicPathToken = process.env.GPT_REPO_PUBLIC_PATH_TOKEN ?? process.env.REPO_READER_PUBLIC_PATH_TOKEN;
+const accessToken = process.env.GPT_REPO_ACCESS_TOKEN;
 
 const registry = configPath
   ? await RootRegistry.fromFile(configPath)
@@ -31,6 +32,18 @@ const mcpRoutePatterns = buildMcpRoutePatterns(publicPathToken);
 app.get("/health", (_req, res) => {
   res.json({ ok: true, name: "gpt-repo-mcp" });
 });
+
+function rejectUnauthorizedBearer(req: Request, res: Response): boolean {
+  if (!accessToken) {
+    return false;
+  }
+  const header = req.headers["authorization"];
+  if (typeof header === "string" && header.startsWith("Bearer ") && header.slice(7) === accessToken) {
+    return false;
+  }
+  res.status(401).json({ error: "Unauthorized" });
+  return true;
+}
 
 function createMcpRequestContext(req: Request): RequestTelemetryContext {
   const method = typeof req.body?.method === "string" ? req.body.method : undefined;
@@ -90,6 +103,10 @@ app.post(mcpRoutePatterns, async (req: Request, res: Response) => {
     });
 
     if (rejectUnauthorizedMcpPath(req, res)) {
+      return;
+    }
+
+    if (rejectUnauthorizedBearer(req, res)) {
       return;
     }
 
@@ -166,6 +183,10 @@ app.get(mcpRoutePatterns, async (req: Request, res: Response) => {
       return;
     }
 
+    if (rejectUnauthorizedBearer(req, res)) {
+      return;
+    }
+
     try {
       const sessionId = req.headers["mcp-session-id"];
       if (typeof sessionId !== "string" || !transports[sessionId]) {
@@ -211,6 +232,10 @@ app.delete(mcpRoutePatterns, async (req: Request, res: Response) => {
       return;
     }
 
+    if (rejectUnauthorizedBearer(req, res)) {
+      return;
+    }
+
     try {
       const sessionId = req.headers["mcp-session-id"];
       if (typeof sessionId !== "string" || !transports[sessionId]) {
@@ -239,6 +264,11 @@ app.delete(mcpRoutePatterns, async (req: Request, res: Response) => {
 const server = app.listen(port, () => {
   const localPath = publicPathToken ? "/t/[token]/mcp" : "/mcp";
   console.error(`gpt-repo-mcp listening on http://localhost:${port}${localPath}`);
+  if (accessToken) {
+    console.error("gpt-repo-mcp: access token auth enabled (Bearer)");
+  } else {
+    console.error("gpt-repo-mcp WARNING: no GPT_REPO_ACCESS_TOKEN set – all requests accepted without authentication");
+  }
 });
 
 server.on("error", (error) => {

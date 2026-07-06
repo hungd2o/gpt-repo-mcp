@@ -22,7 +22,7 @@ describe("package startup scripts", () => {
       expect.arrayContaining(["mcp", "chatgpt", "developer-tools", "repository", "local-first"])
     );
     expect(pkg.scripts?.mcp).toBe("cross-env GPT_REPO_CONFIG=./config.local.json PORT=8787 npm run dev");
-    expect(pkg.scripts?.["setup:config"]).toBe("node --eval \"require('node:fs').copyFileSync('config.example.json', 'config.local.json')\"");
+    expect(pkg.scripts?.["setup:config"]).toBe("node scripts/setup-config.mjs");
     expect(pkg.scripts?.["setup:env"]).toBe("node --eval \"require('node:fs').copyFileSync('.env.example', '.env')\"");
     expect(pkg.scripts?.tunnel).toContain("--log=stdout");
     expect(pkg.scripts?.connect).toBe("node scripts/connect-dev.mjs");
@@ -47,6 +47,8 @@ describe("package startup scripts", () => {
     expect(script).toContain("ChatGPT MCP URL");
     expect(script).toContain("Reusing existing ngrok tunnel");
     expect(script).toContain("readNgrokHttpsUrl");
+    expect(script).toContain("GPT_REPO_ACCESS_TOKEN");
+    expect(script).toContain("WARNING: GPT_REPO_ACCESS_TOKEN is not set");
   });
 
   test("includes secure tunnel startup script and env example", async () => {
@@ -71,11 +73,99 @@ describe("package startup scripts", () => {
     expect(envExample).toContain("GPT_REPO_CONFIG=./config.local.json");
     expect(envExample).toContain("GPT_REPO_LOG_FORMAT=pretty");
     expect(envExample).toContain("PORT=8787");
+    expect(envExample).toContain("GPT_REPO_ACCESS_TOKEN=");
+    expect(envExample).toContain("GPT_REPO_PUBLIC_PATH_TOKEN=");
 
     const connectionOptions = await readFile(join(process.cwd(), "docs", "CONNECTION_OPTIONS.md"), "utf8");
     expect(connectionOptions).toContain("example local `tunnel-client` profile label");
     expect(connectionOptions).toContain("not a `repo_id`, GitHub repo, ChatGPT connector name, ngrok tunnel, or MCP server name");
     expect(connectionOptions).toContain("tunnel-client run --profile <profile>");
+  });
+
+  test("setup-config script exists and has expected behaviours", async () => {
+    const scriptPath = join(process.cwd(), "scripts", "setup-config.mjs");
+    await expect(access(scriptPath)).resolves.toBeUndefined();
+    const script = await readFile(scriptPath, "utf8");
+
+    // Token generation
+    expect(script).toContain("GPT_REPO_ACCESS_TOKEN");
+    expect(script).toContain("GPT_REPO_PUBLIC_PATH_TOKEN");
+    expect(script).toContain("randomBytes");
+    // Idempotency: skip if already set
+    expect(script).toContain("already set");
+    // Masking
+    expect(script).toContain("maskToken");
+    // No-auth opt-out
+    expect(script).toContain("--no-auth");
+    // Writes to .env
+    expect(script).toContain(".env");
+    expect(script).toContain("writeFileSync");
+    // Copies config
+    expect(script).toContain("config.example.json");
+    expect(script).toContain("config.local.json");
+  });
+
+  test("setup-config generates tokens and writes .env in a temp dir", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "gpt-repo-setup-config-"));
+    const scriptPath = join(process.cwd(), "scripts", "setup-config.mjs");
+    const configSrc = join(process.cwd(), "config.example.json");
+
+    // Provide a config.example.json so the script can copy it
+    const exampleContent = await readFile(configSrc, "utf8");
+    await writeFile(join(fixture, "config.example.json"), exampleContent, "utf8");
+
+    const { stdout } = await run(process.execPath, [scriptPath], fixture);
+
+    // Config was copied
+    await expect(access(join(fixture, "config.local.json"))).resolves.toBeUndefined();
+
+    // .env was created
+    const envContent = await readFile(join(fixture, ".env"), "utf8");
+    expect(envContent).toContain("GPT_REPO_ACCESS_TOKEN=");
+    expect(envContent).toContain("GPT_REPO_PUBLIC_PATH_TOKEN=");
+
+    // Tokens are non-empty
+    const accessLine = envContent.split("\n").find((l) => l.startsWith("GPT_REPO_ACCESS_TOKEN="));
+    const pathLine = envContent.split("\n").find((l) => l.startsWith("GPT_REPO_PUBLIC_PATH_TOKEN="));
+    expect(accessLine?.split("=")[1]?.trim().length).toBeGreaterThan(0);
+    expect(pathLine?.split("=")[1]?.trim().length).toBeGreaterThan(0);
+
+    // Output mentions generated / saved
+    expect(stdout).toContain("Generated GPT_REPO_ACCESS_TOKEN");
+    expect(stdout).toContain("Generated GPT_REPO_PUBLIC_PATH_TOKEN");
+    expect(stdout).toContain("Saved to .env");
+  });
+
+  test("setup-config is idempotent – does not overwrite existing tokens", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "gpt-repo-setup-idempotent-"));
+    const scriptPath = join(process.cwd(), "scripts", "setup-config.mjs");
+
+    await writeFile(join(fixture, "config.example.json"), "{}", "utf8");
+    // Pre-seed .env with tokens
+    await writeFile(
+      join(fixture, ".env"),
+      "GPT_REPO_ACCESS_TOKEN=existing-access\nGPT_REPO_PUBLIC_PATH_TOKEN=existing-path\n",
+      "utf8"
+    );
+
+    await run(process.execPath, [scriptPath], fixture);
+
+    const envContent = await readFile(join(fixture, ".env"), "utf8");
+    expect(envContent).toContain("GPT_REPO_ACCESS_TOKEN=existing-access");
+    expect(envContent).toContain("GPT_REPO_PUBLIC_PATH_TOKEN=existing-path");
+  });
+
+  test("setup-config --no-auth skips token generation", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "gpt-repo-setup-noauth-"));
+    const scriptPath = join(process.cwd(), "scripts", "setup-config.mjs");
+
+    await writeFile(join(fixture, "config.example.json"), "{}", "utf8");
+
+    const { stdout } = await run(process.execPath, [scriptPath, "--no-auth"], fixture);
+    expect(stdout).toContain("--no-auth");
+
+    // .env should not have been created
+    await expect(access(join(fixture, ".env"))).rejects.toThrow();
   });
 
   test("public hygiene script blocks historical docs and local-only artifacts", async () => {
