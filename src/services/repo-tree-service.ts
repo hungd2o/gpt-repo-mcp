@@ -78,15 +78,22 @@ export class RepoTreeService {
         return;
       }
       if (resolved.stat.isDirectory()) {
-        if (repoPath !== ".") {
+        // At max depth, emit the directory immediately without recursing; we know
+        // there may be content but we are not going deeper.
+        if (depth >= maxDepth && repoPath !== ".") {
           entries.push({ path: repoPath, type: "directory" });
+          return;
         }
+
         const read = await safeReadDir(resolved.absolutePath, repoPath);
         if (!read.ok) {
           warnings.push({ path: read.skipped.path, code: read.skipped.reason, message: "Skipped inaccessible directory" });
           excludedSummary.inaccessible = (excludedSummary.inaccessible ?? 0) + 1;
           return;
         }
+
+        const countBefore = entries.length;
+
         for (const child of read.entries.sort((a, b) => a.name.localeCompare(b.name))) {
           const childRepoPath = repoPath === "." ? child.name : `${repoPath}/${child.name}`;
           if (ignoreEngine.isSensitiveCandidate(childRepoPath)) {
@@ -106,17 +113,22 @@ export class RepoTreeService {
             continue;
           }
           const includedByFlag = (isDependency && options.include_dependencies) || (isGenerated && options.include_generated);
-          if (respectDefaultExcludes && !includedByFlag) {
-            // Check the plain path OR, for directories, a sentinel child path so that
-            // patterns like "artifacts/**" or "**/.venv/**" prune the directory entry itself.
-            const dirPruned = child.isDirectory() && ignoreEngine.isIgnored(`${childRepoPath}/__prune__`);
-            if (ignoreEngine.isIgnored(childRepoPath) || dirPruned) {
-              excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
-              continue;
-            }
+          if (respectDefaultExcludes && !includedByFlag && ignoreEngine.isIgnored(childRepoPath)) {
+            excludedSummary.default_excludes = (excludedSummary.default_excludes ?? 0) + 1;
+            continue;
           }
           await walk(childRepoPath, depth + 1);
         }
+
+        // Emit the directory entry only after recursion so that directories whose
+        // entire subtree is filtered out (e.g. by "artifacts/**") are omitted.
+        // Negation patterns like "!artifacts/keep.txt" are handled correctly because
+        // any re-included descendant will have been pushed to entries above,
+        // causing entries.length > countBefore and the directory to be emitted.
+        if (repoPath !== "." && entries.length > countBefore) {
+          entries.push({ path: repoPath, type: "directory" });
+        }
+
         return;
       }
       if (includeFiles && resolved.stat.isFile()) {

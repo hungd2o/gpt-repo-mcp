@@ -174,6 +174,26 @@ describe("RepoTreeService", () => {
     expect(result.entries.some((e) => e.path.startsWith("outputs"))).toBe(false);
   });
 
+  test(".repo-mcpignore negation patterns re-include specific files", async () => {
+    const fixture = await createRepoFixture();
+    await mkdir(join(fixture.root, "artifacts"), { recursive: true });
+    await writeFile(join(fixture.root, "artifacts", "output.bin"), "binary");
+    await writeFile(join(fixture.root, "artifacts", "keep.txt"), "important");
+
+    // Exclude everything inside artifacts/ but keep one specific file.
+    await writeFile(join(fixture.root, ".repo-mcpignore"), "artifacts/**\n!artifacts/keep.txt\n");
+
+    const sandbox = new PathSandbox(fixture.root);
+    const result = await new RepoTreeService(fixture.root, sandbox).tree({ include_files: true });
+
+    // output.bin is excluded by artifacts/**
+    expect(result.entries.some((e) => e.path === "artifacts/output.bin")).toBe(false);
+    // keep.txt is re-included by the negation pattern
+    expect(result.entries.some((e) => e.path === "artifacts/keep.txt")).toBe(true);
+    // artifacts dir is still shown because it has a visible descendant
+    expect(result.entries.some((e) => e.path === "artifacts")).toBe(true);
+  });
+
   test("tree works normally when .repo-mcpignore is absent", async () => {
     const fixture = await createRepoFixture();
     const sandbox = new PathSandbox(fixture.root);
