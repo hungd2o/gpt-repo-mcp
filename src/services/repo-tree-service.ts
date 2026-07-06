@@ -63,6 +63,28 @@ export class RepoTreeService {
     const repoPatterns = await loadRepoMcpIgnorePatterns(this.root);
     const ignoreEngine = new IgnoreEngine(repoPatterns);
 
+    const isVisibleBoundaryChild = (child: Dirent, childRepoPath: string): boolean => {
+      if (ignoreEngine.isSensitiveCandidate(childRepoPath)) {
+        return false;
+      }
+      const isDependency = isDependencyPath(childRepoPath);
+      const isGenerated = isGeneratedPath(childRepoPath);
+      if (isDependency && !options.include_dependencies) {
+        return false;
+      }
+      if (isGenerated && !options.include_generated) {
+        return false;
+      }
+      const includedByFlag = (isDependency && options.include_dependencies) || (isGenerated && options.include_generated);
+      if (respectDefaultExcludes && !includedByFlag && ignoreEngine.isIgnored(childRepoPath)) {
+        return false;
+      }
+      if (child.isFile() && !includeFiles) {
+        return false;
+      }
+      return true;
+    };
+
     const walk = async (repoPath: string, depth: number): Promise<void> => {
       if (depth > maxDepth) {
         return;
@@ -78,10 +100,20 @@ export class RepoTreeService {
         return;
       }
       if (resolved.stat.isDirectory()) {
-        // At max depth, emit the directory immediately without recursing; we know
-        // there may be content but we are not going deeper.
         if (depth >= maxDepth && repoPath !== ".") {
-          entries.push({ path: repoPath, type: "directory" });
+          const read = await safeReadDir(resolved.absolutePath, repoPath);
+          if (!read.ok) {
+            warnings.push({ path: read.skipped.path, code: read.skipped.reason, message: "Skipped inaccessible directory" });
+            excludedSummary.inaccessible = (excludedSummary.inaccessible ?? 0) + 1;
+            return;
+          }
+          const hasVisibleBoundaryChild = read.entries.some((child) => {
+            const childRepoPath = repoPath === "." ? child.name : `${repoPath}/${child.name}`;
+            return isVisibleBoundaryChild(child, childRepoPath);
+          });
+          if (hasVisibleBoundaryChild) {
+            entries.push({ path: repoPath, type: "directory" });
+          }
           return;
         }
 

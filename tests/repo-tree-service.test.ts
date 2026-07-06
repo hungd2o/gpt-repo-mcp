@@ -37,6 +37,31 @@ describe("RepoTreeService", () => {
     expect(result.entries.some((entry) => entry.path === "src/app.ts")).toBe(false);
   });
 
+  test("at max_depth omits directories with no visible boundary children", async () => {
+    const fixture = await createRepoFixture();
+    await mkdir(join(fixture.root, "artifacts"), { recursive: true });
+    await writeFile(join(fixture.root, "artifacts", "output.bin"), "binary");
+    await writeFile(join(fixture.root, ".repo-mcpignore"), "artifacts/**\n");
+
+    const sandbox = new PathSandbox(fixture.root);
+    const result = await new RepoTreeService(fixture.root, sandbox).tree({ max_depth: 1, include_files: true });
+
+    expect(result.entries.some((entry) => entry.path === "artifacts")).toBe(false);
+  });
+
+  test("at max_depth keeps directories with re-included boundary children", async () => {
+    const fixture = await createRepoFixture();
+    await mkdir(join(fixture.root, "artifacts"), { recursive: true });
+    await writeFile(join(fixture.root, "artifacts", "output.bin"), "binary");
+    await writeFile(join(fixture.root, "artifacts", "keep.txt"), "important");
+    await writeFile(join(fixture.root, ".repo-mcpignore"), "artifacts/**\n!artifacts/keep.txt\n");
+
+    const sandbox = new PathSandbox(fixture.root);
+    const result = await new RepoTreeService(fixture.root, sandbox).tree({ max_depth: 1, include_files: true });
+
+    expect(result.entries.some((entry) => entry.path === "artifacts")).toBe(true);
+  });
+
   test("paginates deterministic tree entries with cursor", async () => {
     const fixture = await createRepoFixture();
     const sandbox = new PathSandbox(fixture.root);
