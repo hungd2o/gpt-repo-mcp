@@ -2,12 +2,14 @@ import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { maybePromptRuntimeMenu } from "./runtime-menu.mjs";
 
 const DEFAULT_CONFIG_PATH = "./config.local.json";
 const DEFAULT_PORT = "8787";
 const DEFAULT_PROFILE = "gpt-repo-local";
 const children = [];
 let shuttingDown = false;
+let askedRuntimeOptions = false;
 
 await loadDotEnv(".env");
 await ensureConfigExists(envValue("GPT_REPO_CONFIG", "REPO_READER_CONFIG", DEFAULT_CONFIG_PATH));
@@ -80,18 +82,20 @@ function envValue(primaryName, legacyName, fallback) {
   return fallback;
 }
 
-function prefixOutput(stream, label) {
+function prefixOutput(stream, label, onLine) {
   let buffer = "";
   stream.on("data", (chunk) => {
     buffer += chunk.toString();
     const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() ?? "";
     for (const line of lines) {
+      onLine?.(line);
       process.stdout.write(`[${label}] ${line}\n`);
     }
   });
   stream.on("end", () => {
     if (buffer.length > 0) {
+      onLine?.(buffer);
       process.stdout.write(`[${label}] ${buffer}\n`);
     }
   });
@@ -120,8 +124,14 @@ function startProcesses() {
     stdio: ["ignore", "pipe", "pipe"]
   });
   children.push(mcp);
-  prefixOutput(mcp.stdout, "mcp");
-  prefixOutput(mcp.stderr, "mcp");
+  const onMcpLine = (line) => {
+    if (!askedRuntimeOptions && /gpt-repo-mcp listening on http:\/\/localhost:\d+/.test(line)) {
+      askedRuntimeOptions = true;
+      void maybeOfferRuntimeOptions();
+    }
+  };
+  prefixOutput(mcp.stdout, "mcp", onMcpLine);
+  prefixOutput(mcp.stderr, "mcp", onMcpLine);
   mcp.once("exit", onChildExit("mcp"));
 
   const tunnel = spawn(tunnelClientBin, ["run", "--profile", tunnelClientProfile], {
@@ -136,6 +146,13 @@ function startProcesses() {
     globalThis.console.error(`[tunnel] failed to start: ${error.message}`);
     terminateAndExit(1);
   });
+}
+
+async function maybeOfferRuntimeOptions() {
+  const action = await maybePromptRuntimeMenu({ appLabel: "MCP + secure tunnel" });
+  if (action === "background" || action === "exit") {
+    terminateAndExit(0);
+  }
 }
 
 function onChildExit(name) {
