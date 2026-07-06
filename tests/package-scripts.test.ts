@@ -27,6 +27,11 @@ describe("package startup scripts", () => {
     expect(pkg.scripts?.tunnel).toContain("--log=stdout");
     expect(pkg.scripts?.connect).toBe("node scripts/connect-dev.mjs");
     expect(pkg.scripts?.["connect:secure"]).toBe("node scripts/connect-secure.mjs");
+    expect(pkg.scripts?.["mcp:bg:status"]).toBe("node scripts/windows-background.mjs status");
+    expect(pkg.scripts?.["mcp:bg:install"]).toBe("node scripts/windows-background.mjs install");
+    expect(pkg.scripts?.["mcp:bg:remove"]).toBe("node scripts/windows-background.mjs remove");
+    expect(pkg.scripts?.["mcp:bg:start"]).toBe("node scripts/windows-background.mjs start");
+    expect(pkg.scripts?.["mcp:bg:stop"]).toBe("node scripts/windows-background.mjs stop");
     expect(pkg.scripts?.add).toBe("node dist/cli/connect-gpt.js add");
     expect(pkg.scripts?.remove).toBe("node dist/cli/connect-gpt.js remove");
     expect(pkg.scripts?.list).toBe("node dist/cli/connect-gpt.js list");
@@ -47,6 +52,26 @@ describe("package startup scripts", () => {
     expect(script).toContain("ChatGPT MCP URL");
     expect(script).toContain("Reusing existing ngrok tunnel");
     expect(script).toContain("readNgrokHttpsUrl");
+    expect(script).toContain("maybeOfferWindowsBackgroundInstall");
+  });
+
+  test("includes windows background startup scripts", async () => {
+    const managerPath = join(process.cwd(), "scripts", "windows-background.mjs");
+    const launcherPath = join(process.cwd(), "scripts", "start-mcp-background.ps1");
+    await expect(access(managerPath)).resolves.toBeUndefined();
+    await expect(access(launcherPath)).resolves.toBeUndefined();
+
+    const manager = await readFile(managerPath, "utf8");
+    expect(manager).toContain("gpt-repo-mcp");
+    expect(manager).toContain("schtasks");
+    expect(manager).toContain("[status|install|remove|start|stop]");
+    expect(manager).toContain("Install startup task now? [y/N]");
+    expect(manager).toContain("Background startup is only available on Windows");
+
+    const launcher = await readFile(launcherPath, "utf8");
+    expect(launcher).toContain("$env:GPT_REPO_CONFIG");
+    expect(launcher).toContain("$env:PORT");
+    expect(launcher).toContain("npm run dev");
   });
 
   test("includes secure tunnel startup script and env example", async () => {
@@ -146,6 +171,8 @@ describe("package startup scripts", () => {
     expect(setup).toContain("Windows");
     expect(setup).toContain("ngrok help");
     expect(setup).toContain("npm run connect");
+    expect(readme).toContain("npm run mcp:bg:install");
+    expect(setup).toContain("npm run mcp:bg:install");
     expect(connectionOptions).toContain("## ngrok prerequisites");
     expect(connectionOptions).toContain("SETUP.md#install-ngrok-from-zero");
   });

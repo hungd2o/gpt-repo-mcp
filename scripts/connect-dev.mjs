@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { maybeOfferWindowsBackgroundInstall } from "./windows-background.mjs";
 
 const CONFIG_PATH = "./config.local.json";
 const PORT = "8787";
@@ -208,4 +209,5 @@ process.on("SIGINT", () => handleShutdown("SIGINT"));
 process.on("SIGTERM", () => handleShutdown("SIGTERM"));
 
 await ensureConfigExists();
+await maybeOfferWindowsBackgroundInstall();
 ensureNgrokAvailable();

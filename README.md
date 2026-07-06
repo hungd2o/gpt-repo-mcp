@@ -67,6 +67,8 @@ npm run add -- /path/to/your/repo --mode ship
 npm run connect
 ```
 
+On Windows, `npm run connect` now offers an opt-in prompt to install a background startup task for the local MCP server. Nothing is installed unless you confirm.
+
 Copy the printed URL:
 
 ```text
@@ -217,6 +219,11 @@ Read the full model in [docs/SECURITY.md](docs/SECURITY.md).
 | `npm run connect` | Start the MCP server and try to use or reuse an ngrok HTTPS tunnel. |
 | `npm run connect:secure` | Start the MCP server and OpenAI Secure MCP Tunnel. |
 | `npm run mcp` | Start only the local MCP server with `config.local.json`. |
+| `npm run mcp:bg:status` | Show Windows background startup status. |
+| `npm run mcp:bg:install` | Install opt-in Windows background startup task. |
+| `npm run mcp:bg:remove` | Remove Windows background startup task. |
+| `npm run mcp:bg:start` | Start the Windows background MCP task now. |
+| `npm run mcp:bg:stop` | Stop the Windows background MCP task. |
 | `npm run tunnel` | Start only an ngrok tunnel to local port `8787`. |
 | `npm run list` | List approved repositories. |
 | `npm run add -- <path>` | Add an approved repository root. |

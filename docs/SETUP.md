@@ -135,6 +135,22 @@ ChatGPT MCP URL: https://<ngrok-host>/t/<random-token>/mcp
 
 Paste the exact printed URL into ChatGPT Developer Mode connector settings. The random path token is guess-resistance only, not authentication. Anyone with the full URL can reach the endpoint while the tunnel is running. Treat public tunnel URLs as temporary local development endpoints and stop them between sessions.
 
+### Windows: opt-in background startup
+
+If you run `npm run connect` in a Windows terminal, GPT Repo MCP can offer to install a per-user startup task (`gpt-repo-mcp`) so the local MCP server can run without keeping a terminal open. This is opt-in and requires explicit confirmation.
+
+You can also manage it directly:
+
+```bash
+npm run mcp:bg:status
+npm run mcp:bg:install
+npm run mcp:bg:start
+npm run mcp:bg:stop
+npm run mcp:bg:remove
+```
+
+On macOS/Linux these commands are no-ops with a clear unsupported message.
+
 ## Manual Tunnel Setup
 
 Use `npm run mcp` when you want to run the local server yourself and expose port `8787` through your own HTTPS tunnel, reverse proxy, or network setup:
@@ -178,6 +194,11 @@ Use GPT Repo MCP. Which repositories can you access?
 | `npm run connect` | Start the server and try to use or reuse ngrok. |
 | `npm run connect:secure` | Start the server and OpenAI Secure MCP Tunnel. |
 | `npm run mcp` | Start only the local MCP server. |
+| `npm run mcp:bg:status` | Show Windows background startup status. |
+| `npm run mcp:bg:install` | Install opt-in Windows background startup task. |
+| `npm run mcp:bg:remove` | Remove Windows background startup task. |
+| `npm run mcp:bg:start` | Start the Windows background MCP task now. |
+| `npm run mcp:bg:stop` | Stop the Windows background MCP task. |
 | `npm run tunnel` | Start only the ngrok tunnel. |
 | `npm run list` | List approved repositories. |
 | `npm run add -- <path>` | Add an approved repository root. |
