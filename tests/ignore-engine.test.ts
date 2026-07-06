@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { IgnoreEngine } from "../src/services/ignore-engine.js";
+import { IgnoreEngine, loadRepoMcpIgnorePatterns } from "../src/services/ignore-engine.js";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 describe("IgnoreEngine", () => {
   test("applies default excludes consistently", () => {
@@ -57,5 +60,36 @@ describe("IgnoreEngine", () => {
     expect(engine.isSensitiveCandidate(".env.production")).toBe(true);
     expect(engine.isSensitiveCandidate(".env.anything")).toBe(true);
     expect(engine.isSensitiveCandidate("nested/.env.example")).toBe(true);
+  });
+
+  test("applies extra patterns passed to constructor", () => {
+    const engine = new IgnoreEngine(["**/.venv/**", "artifacts/**"]);
+
+    expect(engine.isIgnored(".venv/lib/python3.11")).toBe(true);
+    expect(engine.isIgnored("artifacts/pytest-cache/v1")).toBe(true);
+    expect(engine.isIgnored("src/index.ts")).toBe(false);
+  });
+
+  test("loadRepoMcpIgnorePatterns returns patterns from .repo-mcpignore", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ignore-engine-test-"));
+    await writeFile(
+      join(root, ".repo-mcpignore"),
+      [
+        "# comment line",
+        "**/.venv/**",
+        "",
+        "artifacts/**",
+        "  outputs/**  "
+      ].join("\n")
+    );
+
+    const patterns = await loadRepoMcpIgnorePatterns(root);
+    expect(patterns).toEqual(["**/.venv/**", "artifacts/**", "outputs/**"]);
+  });
+
+  test("loadRepoMcpIgnorePatterns returns empty array when file is absent", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ignore-engine-test-"));
+    const patterns = await loadRepoMcpIgnorePatterns(root);
+    expect(patterns).toEqual([]);
   });
 });

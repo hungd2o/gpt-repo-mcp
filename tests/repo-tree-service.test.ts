@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PathSandbox } from "../src/services/path-sandbox.js";
 import { RepoTreeService } from "../src/services/repo-tree-service.js";
@@ -105,5 +105,81 @@ describe("RepoTreeService", () => {
     ]);
     expect(result.truncated).toBe(true);
     expect(result.next_cursor).toBe("4");
+  });
+
+  test("result always includes a warnings array", async () => {
+    const fixture = await createRepoFixture();
+    const sandbox = new PathSandbox(fixture.root);
+    const result = await new RepoTreeService(fixture.root, sandbox).tree({ include_files: true });
+
+    expect(result.warnings).toBeInstanceOf(Array);
+  });
+
+  test("soft-skips an inaccessible directory and records a warning", async () => {
+    if (process.platform === "win32") {
+      return; // chmod(000) is not meaningful on Windows
+    }
+
+    const fixture = await createRepoFixture();
+    await mkdir(join(fixture.root, "locked"), { recursive: true });
+    await writeFile(join(fixture.root, "locked", "secret.ts"), "export const x = 1;\n");
+    await chmod(join(fixture.root, "locked"), 0o000);
+
+    const sandbox = new PathSandbox(fixture.root);
+    let result;
+    try {
+      result = await new RepoTreeService(fixture.root, sandbox).tree({ include_files: true });
+    } finally {
+      await chmod(join(fixture.root, "locked"), 0o755);
+    }
+
+    // The rest of the tree must still be returned
+    expect(result.entries.some((e) => e.path === "src")).toBe(true);
+    expect(result.entries.some((e) => e.path === "locked/secret.ts")).toBe(false);
+
+    const warning = result.warnings.find((w) => w.path === "locked");
+    expect(warning).toBeDefined();
+    expect(["EACCES", "EPERM"]).toContain(warning!.code);
+    expect(result.excluded_summary.inaccessible).toBeGreaterThan(0);
+  });
+
+  test("applies .repo-mcpignore patterns during tree scan", async () => {
+    const fixture = await createRepoFixture();
+    await mkdir(join(fixture.root, "artifacts", "pytest-cache"), { recursive: true });
+    await writeFile(join(fixture.root, "artifacts", "report.txt"), "report\n");
+    await writeFile(join(fixture.root, "artifacts", "pytest-cache", "v1.json"), "{}");
+
+    await writeFile(join(fixture.root, ".repo-mcpignore"), "artifacts/**\n");
+
+    const sandbox = new PathSandbox(fixture.root);
+    const result = await new RepoTreeService(fixture.root, sandbox).tree({ include_files: true });
+
+    expect(result.entries.some((e) => e.path.startsWith("artifacts"))).toBe(false);
+    expect(result.excluded_summary.default_excludes).toBeGreaterThan(0);
+  });
+
+  test(".repo-mcpignore supports comments and blank lines", async () => {
+    const fixture = await createRepoFixture();
+    await mkdir(join(fixture.root, "outputs"), { recursive: true });
+    await writeFile(join(fixture.root, "outputs", "data.csv"), "a,b,c\n");
+
+    await writeFile(
+      join(fixture.root, ".repo-mcpignore"),
+      "# generated outputs\n\noutputs/**\n"
+    );
+
+    const sandbox = new PathSandbox(fixture.root);
+    const result = await new RepoTreeService(fixture.root, sandbox).tree({ include_files: true });
+
+    expect(result.entries.some((e) => e.path.startsWith("outputs"))).toBe(false);
+  });
+
+  test("tree works normally when .repo-mcpignore is absent", async () => {
+    const fixture = await createRepoFixture();
+    const sandbox = new PathSandbox(fixture.root);
+    const result = await new RepoTreeService(fixture.root, sandbox).tree({ include_files: true });
+
+    expect(result.entries.some((e) => e.path === "src")).toBe(true);
+    expect(result.warnings).toEqual([]);
   });
 });
