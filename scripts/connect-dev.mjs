@@ -1,15 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { maybePromptRuntimeMenu } from "./runtime-menu.mjs";
+import { loadEnv } from "./load-env.mjs";
 
 const CONFIG_PATH = "./config.local.json";
 const PORT = "8787";
 const NGROK_API_URL = "http://127.0.0.1:4040/api/tunnels";
 
-await loadDotEnv(".env");
+await loadEnv({ dev: process.env.NODE_ENV === "development" });
 
 const publicPathToken =
   (process.env.GPT_REPO_PUBLIC_PATH_TOKEN && process.env.GPT_REPO_PUBLIC_PATH_TOKEN.trim()) ||
@@ -18,27 +19,6 @@ const publicPathToken =
 const children = [];
 let shuttingDown = false;
 let askedRuntimeOptions = false;
-
-function loadDotEnv(path) {
-  return readFile(path, "utf8")
-    .then((raw) => {
-      for (const line of raw.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
-          continue;
-        }
-        const eqIdx = trimmed.indexOf("=");
-        const key = trimmed.slice(0, eqIdx).trim();
-        const val = trimmed.slice(eqIdx + 1).trim();
-        if (key && process.env[key] === undefined) {
-          process.env[key] = val;
-        }
-      }
-    })
-    .catch(() => {
-      // .env is optional
-    });
-}
 
 function warnIfNoAuth() {
   if (!process.env.GPT_REPO_ACCESS_TOKEN) {

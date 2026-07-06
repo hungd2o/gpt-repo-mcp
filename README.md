@@ -252,6 +252,37 @@ New to ngrok? See [Install ngrok from zero](docs/SETUP.md#install-ngrok-from-zer
 - Write blocked: ask ChatGPT to run `repo_policy_explain` for the repo id and path.
 - Schema mismatch: refresh ChatGPT Developer Mode and run `npm test -- tests/mcp-contract.test.ts tests/tool-contracts.test.ts`.
 - Tunnel 502: confirm the local server is running, check `/health`, then restart ngrok or try a fresh tunnel.
+- **"no GPT_REPO_ACCESS_TOKEN set" warning after `npm run setup:config`**: the token was saved to `.env`, but it is not loaded. Make sure you are starting the server through `npm run connect` or `npm run connect:secure`. Both scripts load `.env` automatically before checking for the token. If you start the server directly (e.g. `npm run dev` or `npm start`) without running one of these scripts first, `.env` is not loaded by default.
+
+## Env File Strategy
+
+`npm run connect` and `npm run connect:secure` automatically load environment variables from `.env` files before starting the server. You do not need to set them in your shell.
+
+**Precedence (highest to lowest):**
+
+| Source | When active | Notes |
+| --- | --- | --- |
+| Shell / `cross-env` | Always | Pre-existing `process.env` is never overwritten by files. |
+| `.env.dev` | `NODE_ENV=development` | Dev override over `.env`; ignored in production. |
+| `.env` | Always (file optional) | Base env; created by `npm run setup:config`. |
+
+**Typical flow:**
+
+```bash
+npm run setup:config     # creates .env with GPT_REPO_ACCESS_TOKEN and GPT_REPO_PUBLIC_PATH_TOKEN
+npm run connect          # loads .env automatically, no token warning
+npm run connect:secure   # same – loads .env automatically
+```
+
+Override a single variable without changing `.env`:
+
+```bash
+GPT_REPO_CONFIG=./config.other.json npm run connect
+# or
+cross-env GPT_REPO_CONFIG=./config.other.json npm run connect
+```
+
+The shell / `cross-env` value takes priority over the file value.
 
 ## License
 

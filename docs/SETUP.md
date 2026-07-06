@@ -216,6 +216,38 @@ Write, git, and cleanup actions are still policy-limited. ChatGPT will ask for c
 
 If a read, write, or cleanup path is unexpectedly blocked, ask ChatGPT to run `repo_policy_explain` with the repo id and path. It explains read/write/cleanup policy decisions and local git operation toggles without reading or mutating files.
 
+## Env File Strategy
+
+`npm run connect` and `npm run connect:secure` load environment variables from `.env` files automatically before starting the server. You do not need to set them in your shell.
+
+**Precedence (highest to lowest):**
+
+| Source | When active | Notes |
+| --- | --- | --- |
+| Shell / `cross-env` | Always | Pre-existing `process.env` values are never overwritten by file values. |
+| `.env.dev` | `NODE_ENV=development` | Dev-specific override over `.env`; silently ignored when absent. |
+| `.env` | Always (file optional) | Base env created by `npm run setup:config`; silently ignored when absent. |
+
+**Typical flow:**
+
+```bash
+npm run setup:config     # writes GPT_REPO_ACCESS_TOKEN and GPT_REPO_PUBLIC_PATH_TOKEN to .env
+npm run connect          # loads .env, no "no GPT_REPO_ACCESS_TOKEN set" warning
+npm run connect:secure   # same
+```
+
+**Override a single variable without editing `.env`:**
+
+```bash
+GPT_REPO_CONFIG=./config.other.json npm run connect
+# or with cross-env (cross-platform)
+cross-env GPT_REPO_CONFIG=./config.other.json npm run connect
+```
+
+The shell / `cross-env` value takes priority over the file value for that key; all other keys come from `.env` as usual.
+
+**"no GPT_REPO_ACCESS_TOKEN set" warning:** this appears when the server is started outside of `npm run connect` / `npm run connect:secure` (e.g. `npm run dev` or `npm start`) and `.env` has not been loaded by another means. Use `npm run connect` or `npm run connect:secure` for normal local development.
+
 ## Common Failure Modes
 
 - `config.local.json` is missing: run `npm run setup:config`.
