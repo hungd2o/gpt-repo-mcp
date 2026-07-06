@@ -1,8 +1,9 @@
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { maybePromptRuntimeMenu } from "./runtime-menu.mjs";
+import { loadEnv } from "./load-env.mjs";
 
 const DEFAULT_CONFIG_PATH = "./config.local.json";
 const DEFAULT_PORT = "8787";
@@ -11,48 +12,13 @@ const children = [];
 let shuttingDown = false;
 let askedRuntimeOptions = false;
 
-await loadDotEnv(".env");
+await loadEnv({ dev: process.env.NODE_ENV === "development" });
 await ensureConfigExists(envValue("GPT_REPO_CONFIG", "REPO_READER_CONFIG", DEFAULT_CONFIG_PATH));
 ensureRequiredEnv("CONTROL_PLANE_API_KEY");
 const tunnelClientBin = envValue("TUNNEL_CLIENT_BIN", undefined, "tunnel-client");
 const tunnelClientProfile = envValue("TUNNEL_CLIENT_PROFILE", undefined, DEFAULT_PROFILE);
 
 startProcesses();
-
-async function loadDotEnv(path) {
-  let raw;
-  try {
-    raw = await readFile(path, "utf8");
-  } catch (error) {
-    if (isNotFoundError(error)) {
-      return;
-    }
-    throw error;
-  }
-
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) {
-      continue;
-    }
-    const [key, ...valueParts] = trimmed.split("=");
-    if (!key || process.env[key] !== undefined) {
-      continue;
-    }
-    process.env[key] = unquoteEnvValue(valueParts.join("="));
-  }
-}
-
-function unquoteEnvValue(value) {
-  const trimmed = value.trim();
-  if (
-    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
 
 async function ensureConfigExists(configPath) {
   try {
@@ -196,15 +162,6 @@ function handleShutdown(signal) {
   terminateChildren("SIGTERM");
   globalThis.setTimeout(() => terminateChildren("SIGKILL"), 1500);
   globalThis.setTimeout(() => process.exit(0), 1700);
-}
-
-function isNotFoundError(error) {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "ENOENT"
-  );
 }
 
 process.on("SIGINT", () => handleShutdown("SIGINT"));
