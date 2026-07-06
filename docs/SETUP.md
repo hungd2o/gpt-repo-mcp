@@ -143,7 +143,7 @@ Use `npm run mcp` when you want to run the local server yourself and expose port
 npm run mcp
 ```
 
-`npm run mcp` starts only the local MCP server on localhost. It does not start a tunnel and does not generate a public path token by itself.
+`npm run mcp` starts only the local MCP server on localhost. On Windows interactive terminals, after startup it offers a single interactive choice to keep running in foreground, move to background, or install startup service. It does not start a tunnel and does not generate a public path token by itself.
 
 For a manual public tunnel, start the MCP server with an explicit random public path value. See [CONNECTION_OPTIONS.md](CONNECTION_OPTIONS.md) for the advanced environment-variable form.
 
@@ -177,7 +177,7 @@ Use GPT Repo MCP. Which repositories can you access?
 | `npm run doctor` | Check local setup and tunnel readiness. |
 | `npm run connect` | Start the server and try to use or reuse ngrok. |
 | `npm run connect:secure` | Start the server and OpenAI Secure MCP Tunnel. |
-| `npm run mcp` | Start only the local MCP server. |
+| `npm run mcp` | Start local MCP server; Windows interactive mode can move to background or install startup service. |
 | `npm run tunnel` | Start only the ngrok tunnel. |
 | `npm run list` | List approved repositories. |
 | `npm run add -- <path>` | Add an approved repository root. |

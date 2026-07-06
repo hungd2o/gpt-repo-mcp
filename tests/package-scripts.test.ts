@@ -21,7 +21,7 @@ describe("package startup scripts", () => {
     expect(pkg.keywords).toEqual(
       expect.arrayContaining(["mcp", "chatgpt", "developer-tools", "repository", "local-first"])
     );
-    expect(pkg.scripts?.mcp).toBe("cross-env GPT_REPO_CONFIG=./config.local.json PORT=8787 npm run dev");
+    expect(pkg.scripts?.mcp).toBe("node scripts/run-mcp.mjs");
     expect(pkg.scripts?.["setup:config"]).toBe("node scripts/setup-config.mjs");
     expect(pkg.scripts?.["setup:env"]).toBe("node --eval \"require('node:fs').copyFileSync('.env.example', '.env')\"");
     expect(pkg.scripts?.tunnel).toContain("--log=stdout");
@@ -49,6 +49,22 @@ describe("package startup scripts", () => {
     expect(script).toContain("readNgrokHttpsUrl");
     expect(script).toContain("GPT_REPO_ACCESS_TOKEN");
     expect(script).toContain("WARNING: GPT_REPO_ACCESS_TOKEN is not set");
+  });
+
+  test("includes interactive mcp runner with windows background options", async () => {
+    const scriptPath = join(process.cwd(), "scripts", "run-mcp.mjs");
+    const launcherPath = join(process.cwd(), "scripts", "start-mcp-background.ps1");
+    await expect(access(scriptPath)).resolves.toBeUndefined();
+    await expect(access(launcherPath)).resolves.toBeUndefined();
+    const script = await readFile(scriptPath, "utf8");
+    expect(script).toContain("Choose next step");
+    expect(script).toContain("Move this MCP run to background now");
+    expect(script).toContain("Install startup service");
+    expect(script).toContain("schtasks");
+    expect(script).toContain("gpt-repo-mcp");
+    const launcher = await readFile(launcherPath, "utf8");
+    expect(launcher).toContain("$env:GPT_REPO_CONFIG");
+    expect(launcher).toContain("npm run dev");
   });
 
   test("includes secure tunnel startup script and env example", async () => {
