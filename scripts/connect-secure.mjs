@@ -113,6 +113,7 @@ function startProcesses() {
   globalThis.console.log(`Local MCP URL: http://127.0.0.1:${port}/mcp`);
 
   const mcp = spawn("npm", ["run", "dev"], {
+    shell: process.platform === "win32",
     env: {
       ...process.env,
       GPT_REPO_CONFIG: configPath,
