@@ -143,7 +143,7 @@ Use `npm run mcp` when you want to run the local server yourself and expose port
 npm run mcp
 ```
 
-`npm run mcp` starts only the local MCP server on localhost. On Windows interactive terminals, after startup it offers a single interactive choice to keep running in foreground, move to background, or install startup service. It does not start a tunnel and does not generate a public path token by itself.
+`npm run mcp` starts only the local MCP server on localhost. In interactive terminals on Windows and Linux, after startup it offers a runtime menu to keep running in foreground, move to background, or stop now. On Windows, the menu also offers startup service installation (Task Scheduler). It does not start a tunnel and does not generate a public path token by itself.
 
 For a manual public tunnel, start the MCP server with an explicit random public path value. See [CONNECTION_OPTIONS.md](CONNECTION_OPTIONS.md) for the advanced environment-variable form.
 
@@ -160,6 +160,7 @@ For longer-lived or private connector setups, and for workspaces that support it
 ## How To Know It Worked
 
 - `npm run connect` prints an HTTPS URL ending in `/t/<random-token>/mcp`.
+- `npm run connect` and `npm run connect:secure` show the same post-start runtime menu in interactive terminals, including `Move to background and close this terminal`.
 - Or `npm run connect:secure` starts the local MCP server and `tunnel-client`.
 - ChatGPT Developer Mode accepts the connector URL.
 - A new ChatGPT conversation can call the connector.
@@ -177,7 +178,7 @@ Use GPT Repo MCP. Which repositories can you access?
 | `npm run doctor` | Check local setup and tunnel readiness. |
 | `npm run connect` | Start the server and try to use or reuse ngrok. |
 | `npm run connect:secure` | Start the server and OpenAI Secure MCP Tunnel. |
-| `npm run mcp` | Start local MCP server; Windows interactive mode can move to background or install startup service. |
+| `npm run mcp` | Start local MCP server; interactive mode supports foreground/background/stop, with Windows startup-service install option. |
 | `npm run tunnel` | Start only the ngrok tunnel. |
 | `npm run list` | List approved repositories. |
 | `npm run add -- <path>` | Add an approved repository root. |

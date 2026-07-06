@@ -3,6 +3,7 @@ import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
 import process from "node:process";
+import { maybePromptRuntimeMenu } from "./runtime-menu.mjs";
 
 const CONFIG_PATH = "./config.local.json";
 const PORT = "8787";
@@ -16,6 +17,7 @@ const publicPathToken =
 
 const children = [];
 let shuttingDown = false;
+let askedRuntimeOptions = false;
 
 function loadDotEnv(path) {
   return readFile(path, "utf8")
@@ -47,7 +49,7 @@ function warnIfNoAuth() {
   }
 }
 
-function prefixOutput(stream, label) {
+function prefixOutput(stream, label, onLine) {
   let buffer = "";
 
   stream.on("data", (chunk) => {
@@ -56,12 +58,14 @@ function prefixOutput(stream, label) {
     buffer = lines.pop() ?? "";
 
     for (const line of lines) {
+      onLine?.(line);
       process.stdout.write(`[${label}] ${line}\n`);
     }
   });
 
   stream.on("end", () => {
     if (buffer.length > 0) {
+      onLine?.(buffer);
       process.stdout.write(`[${label}] ${buffer}\n`);
     }
   });
@@ -177,8 +181,15 @@ async function startProcesses() {
     process.exit(1);
   });
 
-  prefixOutput(mcp.stdout, "mcp");
-  prefixOutput(mcp.stderr, "mcp");
+  const onMcpLine = (line) => {
+    if (!askedRuntimeOptions && /gpt-repo-mcp listening on http:\/\/localhost:\d+/.test(line)) {
+      askedRuntimeOptions = true;
+      void maybeOfferRuntimeOptions();
+    }
+  };
+
+  prefixOutput(mcp.stdout, "mcp", onMcpLine);
+  prefixOutput(mcp.stderr, "mcp", onMcpLine);
 
   const onChildExit = (name) => (code, signal) => {
     if (shuttingDown) {
@@ -225,6 +236,19 @@ async function startProcesses() {
   tunnel.once("exit", onChildExit("tunnel"));
 
   void announceNgrokUrl();
+}
+
+async function maybeOfferRuntimeOptions() {
+  const action = await maybePromptRuntimeMenu({ appLabel: "MCP + ngrok tunnel" });
+  if (action === "background" || action === "exit") {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    terminateChildren("SIGTERM");
+    globalThis.setTimeout(() => terminateChildren("SIGKILL"), 1500);
+    globalThis.setTimeout(() => process.exit(0), 1700);
+  }
 }
 
 function handleShutdown(signal) {

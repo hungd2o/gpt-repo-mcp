@@ -49,19 +49,26 @@ describe("package startup scripts", () => {
     expect(script).toContain("readNgrokHttpsUrl");
     expect(script).toContain("GPT_REPO_ACCESS_TOKEN");
     expect(script).toContain("WARNING: GPT_REPO_ACCESS_TOKEN is not set");
+    expect(script).toContain("maybePromptRuntimeMenu");
+    expect(script).toContain("MCP + ngrok tunnel");
   });
 
-  test("includes interactive mcp runner with windows background options", async () => {
+  test("includes interactive mcp runner with cross-platform background options", async () => {
     const scriptPath = join(process.cwd(), "scripts", "run-mcp.mjs");
+    const menuPath = join(process.cwd(), "scripts", "runtime-menu.mjs");
     const launcherPath = join(process.cwd(), "scripts", "start-mcp-background.ps1");
     await expect(access(scriptPath)).resolves.toBeUndefined();
+    await expect(access(menuPath)).resolves.toBeUndefined();
     await expect(access(launcherPath)).resolves.toBeUndefined();
     const script = await readFile(scriptPath, "utf8");
-    expect(script).toContain("Choose next step");
-    expect(script).toContain("Move this MCP run to background now");
-    expect(script).toContain("Install startup service");
+    expect(script).toContain("maybePromptRuntimeMenu");
+    expect(script).toContain("allowServiceInstall: process.platform === \"win32\"");
     expect(script).toContain("schtasks");
     expect(script).toContain("gpt-repo-mcp");
+    const menu = await readFile(menuPath, "utf8");
+    expect(menu).toContain("Move to background and close this terminal");
+    expect(menu).toContain("Stop now and close this terminal");
+    expect(menu).toContain("GPT_REPO_BACKGROUND_MODE");
     const launcher = await readFile(launcherPath, "utf8");
     expect(launcher).toContain("$env:GPT_REPO_CONFIG");
     expect(launcher).toContain("npm run dev");
@@ -78,6 +85,8 @@ describe("package startup scripts", () => {
     expect(script).toContain("REPO_READER_LOG_FORMAT");
     expect(script).toContain("tunnel-client run");
     expect(script).toContain("Open ChatGPT connector settings");
+    expect(script).toContain("maybePromptRuntimeMenu");
+    expect(script).toContain("MCP + secure tunnel");
     expect(script).not.toContain("REPO_READER_PUBLIC_PATH_TOKEN");
     expect(script).not.toContain("console.log(process.env.CONTROL_PLANE_API_KEY");
 
@@ -252,6 +261,7 @@ describe("package startup scripts", () => {
     expect(setup).toContain("Windows");
     expect(setup).toContain("ngrok help");
     expect(setup).toContain("npm run connect");
+    expect(setup).toContain("Move to background and close this terminal");
     expect(connectionOptions).toContain("## ngrok prerequisites");
     expect(connectionOptions).toContain("SETUP.md#install-ngrok-from-zero");
   });

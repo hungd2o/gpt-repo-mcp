@@ -216,7 +216,7 @@ Read the full model in [docs/SECURITY.md](docs/SECURITY.md).
 | `npm run doctor` | Check config, scripts, tunnel state, port use, and git status. |
 | `npm run connect` | Start the MCP server and try to use or reuse an ngrok HTTPS tunnel. |
 | `npm run connect:secure` | Start the MCP server and OpenAI Secure MCP Tunnel. |
-| `npm run mcp` | Start the local MCP server (Windows TTY offers interactive background/service choices after startup). |
+| `npm run mcp` | Start the local MCP server (interactive runtime menu supports foreground/background/stop; Windows also supports startup service install). |
 | `npm run tunnel` | Start only an ngrok tunnel to local port `8787`. |
 | `npm run list` | List approved repositories. |
 | `npm run add -- <path>` | Add an approved repository root. |

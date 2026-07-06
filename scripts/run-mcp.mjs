@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import process from "node:process";
-import { createInterface } from "node:readline/promises";
+import { maybePromptRuntimeMenu } from "./runtime-menu.mjs";
 
 const CONFIG_PATH = "./config.local.json";
 const PORT = "8787";
@@ -66,77 +66,22 @@ function mirrorAndDetectReady(stream, destination) {
     for (const line of lines) {
       if (!askedInteractiveOptions && /gpt-repo-mcp listening on http:\/\/localhost:\d+/.test(line)) {
         askedInteractiveOptions = true;
-        void maybeOfferWindowsRuntimeOptions();
+        void maybeOfferRuntimeOptions();
       }
     }
   });
 }
 
-async function maybeOfferWindowsRuntimeOptions() {
-  if (process.platform !== "win32" || !process.stdin.isTTY || !process.stdout.isTTY) {
-    return;
-  }
-
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    process.stdout.write("\nMCP started. Choose next step:\n");
-    process.stdout.write("  [1] Keep running in this terminal\n");
-    process.stdout.write("  [2] Move this MCP run to background now\n");
-    process.stdout.write("  [3] Install startup service (Task Scheduler)\n");
-    const answer = (await rl.question("Select 1/2/3 (default 1): ")).trim();
-    if (answer === "2") {
-      if (!startBackgroundNow()) {
-        process.stderr.write("Could not start background MCP process.\n");
-        return;
-      }
-      process.stdout.write("MCP moved to background. Closing this terminal session.\n");
-      handoffToBackground = true;
-      child.kill("SIGTERM");
-      return;
-    }
-    if (answer === "3") {
-      const installed = installStartupService();
-      if (!installed.ok) {
-        process.stderr.write(`${installed.message}\n`);
-        return;
-      }
-      process.stdout.write(`${installed.message}\n`);
-      const runNow = (await rl.question("Start service now and close this terminal? [y/N]: ")).trim();
-      if (/^y(es)?$/i.test(runNow)) {
-        const started = runStartupServiceNow();
-        if (!started.ok) {
-          process.stderr.write(`${started.message}\n`);
-          return;
-        }
-        process.stdout.write(`${started.message}\n`);
-        handoffToBackground = true;
-        child.kill("SIGTERM");
-      }
-    }
-  } finally {
-    rl.close();
-  }
-}
-
-function startBackgroundNow() {
-  try {
-    const result = spawn("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-WindowStyle",
-      "Hidden",
-      "-File",
-      backgroundLauncherPath()
-    ], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true
-    });
-    result.unref();
-    return true;
-  } catch {
-    return false;
+async function maybeOfferRuntimeOptions() {
+  const action = await maybePromptRuntimeMenu({
+    appLabel: "MCP",
+    allowServiceInstall: process.platform === "win32",
+    installService: installStartupService,
+    runServiceNow: runStartupServiceNow
+  });
+  if (action === "background" || action === "service-background" || action === "exit") {
+    handoffToBackground = true;
+    child.kill("SIGTERM");
   }
 }
 
