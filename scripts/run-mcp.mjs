@@ -13,6 +13,7 @@ await loadDotEnv(".env");
 await ensureConfigExists();
 
 const child = spawn("npm", ["run", "dev"], {
+  shell: process.platform === "win32",
   env: {
     ...process.env,
     GPT_REPO_CONFIG: process.env.GPT_REPO_CONFIG || CONFIG_PATH,
