@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { realpath } from "node:fs/promises";
 import { RepoReaderConfigSchema, type RepoReaderConfig } from "./schema.js";
+import { safeRealpath } from "../services/fs-utils.js";
 
 export type ConfigIssue = {
   code: string;
@@ -62,7 +62,7 @@ export async function validateConfigDocument(document: unknown): Promise<{
       continue;
     }
 
-    const canonicalRoot = await realpath(rootPath);
+    const canonicalRoot = await safeRealpath(rootPath);
     const duplicateOwner = seenRoots.get(canonicalRoot);
     if (duplicateOwner) {
       issues.push({

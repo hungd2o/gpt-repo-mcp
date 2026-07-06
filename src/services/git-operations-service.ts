@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type {
@@ -15,6 +15,7 @@ import { CleanupService } from "./cleanup-service.js";
 import { validateRepoPath } from "./path-sandbox.js";
 import { OperationsPolicy } from "./operations-policy.js";
 import { SecretScanner } from "./secret-scanner.js";
+import { safeRealpath } from "./fs-utils.js";
 
 const execFileAsync = promisify(execFile);
 const ALLOWED_ENV_TEMPLATE_PATHS = new Set([
@@ -391,8 +392,8 @@ async function assertExistingParentWithinRoot(root: string, repoPath: string): P
 
 async function assertRealPathWithinRoot(root: string, target: string): Promise<void> {
   const [rootReal, targetReal] = await Promise.all([
-    realpath(root),
-    realpath(target)
+    safeRealpath(root),
+    safeRealpath(target)
   ]);
   const rel = relative(resolve(rootReal), resolve(targetReal));
   if (rel !== "" && (rel.startsWith("..") || rel.includes(`..${sep}`))) {

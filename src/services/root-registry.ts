@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { realpath } from "node:fs/promises";
 import { z } from "zod";
 import { DEFAULT_LIMITS } from "../policies/limits.js";
 import { RepoReaderError } from "../runtime/errors.js";
 import { OperationsPolicyConfigSchema, WritePolicyConfigSchema } from "../config/schema.js";
+import { safeRealpath } from "./fs-utils.js";
 
 const RepoConfigSchema = z.object({
   repo_id: z.string().min(1),
@@ -36,7 +36,7 @@ export class RootRegistry {
     const parsed = ConfigSchema.parse(config);
     const repos = [];
     for (const repo of parsed.repos) {
-      repos.push({ ...repo, root: await realpath(repo.root) });
+      repos.push({ ...repo, root: await safeRealpath(repo.root) });
     }
     return new RootRegistry(repos, {
       max_files: parsed.limits.max_files ?? DEFAULT_LIMITS.max_files,

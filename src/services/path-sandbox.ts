@@ -1,8 +1,9 @@
-import { lstat, realpath } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { posix } from "node:path";
 import { RepoReaderError } from "../runtime/errors.js";
 import { normalizeRepoPath } from "./ignore-engine.js";
+import { safeRealpath } from "./fs-utils.js";
 
 export type BoundaryClassification =
   | { kind: "normal"; path: string }
@@ -16,8 +17,8 @@ export class PathSandbox {
     const normalized = validateRepoPath(repoPath);
     const absolutePath = join(this.root, normalized);
     const [rootReal, targetReal, stat] = await Promise.all([
-      realpath(this.root),
-      realpath(absolutePath),
+      safeRealpath(this.root),
+      safeRealpath(absolutePath),
       lstat(absolutePath)
     ]);
 

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { posix } from "node:path";
 import type { WriteFileActionSchema, WriteFileInput, WriteFileResult, WriteGroupedEditChange } from "../contracts/write.contract.js";
@@ -8,6 +8,7 @@ import { normalizeRepoPath } from "./ignore-engine.js";
 import { PathSandbox, validateRepoPath } from "./path-sandbox.js";
 import { SecretScanner } from "./secret-scanner.js";
 import { WritePolicy } from "./write-policy.js";
+import { safeRealpath } from "./fs-utils.js";
 import type { z } from "zod";
 
 type WriteAction = z.infer<typeof WriteFileActionSchema>;
@@ -370,8 +371,8 @@ function sha256(content: Buffer): string {
 
 async function assertWithinRoot(root: string, target: string): Promise<void> {
   const [rootReal, targetReal] = await Promise.all([
-    realpath(root),
-    realpath(target)
+    safeRealpath(root),
+    safeRealpath(target)
   ]);
   const rel = relative(resolve(rootReal), resolve(targetReal));
   if (rel !== "" && (rel.startsWith("..") || rel.includes(`..${sep}`))) {
