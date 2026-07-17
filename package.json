@@ -31,6 +31,7 @@
   "scripts": {
     "dev": "tsx src/server.ts",
     "mcp": "node scripts/run-mcp.mjs",
+    "mcp:stdio": "tsx src/cli/connect-gpt.ts stdio",
     "setup:config": "node scripts/setup-config.mjs",
     "setup:env": "node --eval \"require('node:fs').copyFileSync('.env.example', '.env')\"",
     "tunnel": "ngrok http 8787 --log=stdout",

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile, realpath, stat } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { createServer } from "node:net";
 import { createInterface } from "node:readline/promises";
@@ -16,6 +17,7 @@ import {
   writeConfigAtomic
 } from "../config/store.js";
 import { validateConfigDocument } from "../config/validation.js";
+import { startStdioServer } from "../stdio.js";
 
 type CliIo = {
   cwd: string;
@@ -45,6 +47,7 @@ type PermissionMode = "read" | "write" | "ship";
 
 const usage = [
   "Usage:",
+  "  gpt-repo stdio [--config <path>]",
   "  gpt-repo doctor [--config <path>]",
   "  gpt-repo list [--config <path>]",
   "  gpt-repo add <path> [--mode read|write|ship] [--id <repo_id>] [--name <display_name>] [--allow-non-git] [--config <path>]",
@@ -65,6 +68,14 @@ export async function runConnectGptCli(argv: string[], io: CliIo = defaultIo()):
     });
 
     const command = normalizeCommand(args);
+
+    if (command.name === "stdio") {
+      if (args.length !== 1) {
+        throw new CliError("Usage: gpt-repo stdio [--config <path>]");
+      }
+      await startStdioServer({ configPath });
+      return 0;
+    }
 
     if (command.name === "doctor") {
       if (args.length !== 1) {
@@ -635,8 +646,23 @@ function defaultIo(): CliIo {
 
 class CliError extends Error {}
 
-const currentModule = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
-if (import.meta.url === currentModule) {
+// Determine whether this module is the process entry point. process.argv[1] can
+// point through a symlink (e.g. nvm/nvm4w exposes node via a symlinked bin dir),
+// while import.meta.url is always the resolved realpath. Compare realpaths so the
+// CLI still runs when installed globally under a symlinked location.
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) {
+    return false;
+  }
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href;
+  } catch {
+    return import.meta.url === pathToFileURL(entry).href;
+  }
+}
+
+if (isMainModule()) {
   const code = await runConnectGptCli(process.argv.slice(2));
   process.exitCode = code;
 }
