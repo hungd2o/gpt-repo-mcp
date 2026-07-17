@@ -53,6 +53,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "express": "^5.1.0",
     "ignore": "^7.0.5",
+    "sharp": "^0.35.3",
     "zod": "^4.1.12"
   },
   "overrides": {

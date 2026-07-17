@@ -7,6 +7,7 @@ import {
   codexReviewHandler,
   decisionMemoryHandler,
   fetchFileHandler,
+  getImageHandler,
   gitCommitHandler,
   gitDiffHandler,
   gitReviewHandler,
@@ -101,6 +102,15 @@ export const toolCatalog: ToolDefinition[] = [
     outputSchema: toolContracts.repo_fetch_file.output,
     annotations: readOnlyAnnotations,
     handler: fetchFileHandler
+  },
+  {
+    name: "repo_get_image",
+    title: "Get repository image",
+    description: descriptions.repo_get_image,
+    inputSchema: toolContracts.repo_get_image.input,
+    outputSchema: toolContracts.repo_get_image.output,
+    annotations: readOnlyAnnotations,
+    handler: getImageHandler
   },
   {
     name: "repo_read_many",

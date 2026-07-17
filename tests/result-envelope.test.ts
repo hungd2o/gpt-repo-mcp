@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { RepoReaderError } from "../src/runtime/errors.js";
-import { createErrorEnvelope, createSuccessEnvelope } from "../src/runtime/result-envelope.js";
+import { createErrorEnvelope, createImageSuccessEnvelope, createSuccessEnvelope } from "../src/runtime/result-envelope.js";
 
 describe("result envelope", () => {
   test("wraps successful structured content", () => {
@@ -9,6 +9,22 @@ describe("result envelope", () => {
     expect(result.structuredContent).toEqual({ repos: [] });
     expect(result.content[0]?.text).toBe("No approved repositories configured.");
     expect(result.isError).toBeUndefined();
+  });
+
+  test("uses the MCP ImageContent shape without adding metadata to the image block", () => {
+    const data = Buffer.from("complete image", "utf8").toString("base64");
+    const result = createImageSuccessEnvelope(
+      { transparency_mode: "preserved" },
+      "Returned one image.",
+      { data, mimeType: "image/webp" },
+      1024
+    );
+
+    expect(result.content).toEqual([
+      { type: "text", text: "Returned one image." },
+      { type: "image", data, mimeType: "image/webp" }
+    ]);
+    expect(result.content[1]).not.toHaveProperty("transparency_mode");
   });
 
   test("redacts sensitive and absolute-path details from errors", () => {

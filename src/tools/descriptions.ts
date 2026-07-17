@@ -11,6 +11,8 @@ export const descriptions = {
     "Use this when the user asks to find code, inspect usages, perform a bughunt, or locate relevant files before reading them. Prefer this before repo_read_many.",
   repo_fetch_file:
     "Use this when the user names a specific file or after repo_tree/repo_search identifies a relevant file. Supports line ranges. Do not use for broad repository review.",
+  repo_get_image:
+    "Use this when the user needs to inspect a repository screenshot, diagram, or static image. Returns one complete MCP image block, proportionally downscales large files, and can force JPEG for compact opaque previews, lossless PNG, or near-lossless WebP for efficient transparency.",
   repo_read_many:
     "Use this when the user asks to read a bounded set of explicit files or glob-matched files. Do not use this to read an entire repository.",
   repo_git_status:

@@ -1,12 +1,13 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, ImageContent } from "@modelcontextprotocol/sdk/types.js";
 import { SECRET_VALUE_PATTERN } from "../policies/secret-patterns.js";
 import { RepoReaderError, toRepoReaderError } from "./errors.js";
 
-export type ToolContent = { type: "text"; text: string };
+export type TextToolContent = { type: "text"; text: string };
+export type ImageToolContent = ImageContent;
 
 export type SuccessEnvelope<T> = {
   structuredContent: T;
-  content: ToolContent[];
+  content: TextToolContent[];
   _meta?: Record<string, unknown>;
   isError?: undefined;
 };
@@ -22,7 +23,13 @@ export type ErrorEnvelope = {
       diagnostics?: Record<string, unknown>;
     };
   };
-  content: ToolContent[];
+  content: TextToolContent[];
+};
+
+export type ImageSuccessEnvelope<T> = {
+  structuredContent: T;
+  content: [TextToolContent, ImageToolContent];
+  isError?: undefined;
 };
 
 export function redactSensitiveText(value: string): string {
@@ -42,6 +49,28 @@ export function createSuccessEnvelope<T>(
     content: [{ type: "text", text: redactSensitiveText(summary) }],
     ...(meta ? { _meta: meta } : {})
   } as SuccessEnvelope<T> & CallToolResult;
+}
+
+export function createImageSuccessEnvelope<T>(
+  structuredContent: T,
+  summary: string,
+  image: Pick<ImageContent, "data" | "mimeType">,
+  maxSerializedBytes: number,
+  diagnostics?: Record<string, unknown>
+): ImageSuccessEnvelope<T> & CallToolResult {
+  const imageContent: ImageContent = { type: "image", data: image.data, mimeType: image.mimeType };
+  const result = {
+    structuredContent,
+    content: [
+      { type: "text" as const, text: redactSensitiveText(summary) },
+      imageContent
+    ]
+  } as ImageSuccessEnvelope<T> & CallToolResult;
+
+  if (Buffer.byteLength(JSON.stringify(result), "utf8") > maxSerializedBytes) {
+    throw new RepoReaderError("IMAGE_RESULT_TOO_LARGE", "The rendered image exceeds the response budget. Try a lower max_long_edge.", { diagnostics });
+  }
+  return result;
 }
 
 export function createErrorEnvelope(error: RepoReaderError | Error | {
@@ -86,6 +115,9 @@ function sanitizeDiagnostics(diagnostics: Record<string, unknown>): Record<strin
   copyShaDiagnostic(diagnostics, safe, "head_sha");
   copyShaDiagnostic(diagnostics, safe, "expected_head_sha");
   copySafeTextDiagnostic(diagnostics, safe, "recovery_hint");
+  copyNonnegativeIntegerDiagnostic(diagnostics, safe, "source_width");
+  copyNonnegativeIntegerDiagnostic(diagnostics, safe, "source_height");
+  copyNonnegativeIntegerDiagnostic(diagnostics, safe, "recommended_max_long_edge");
 
   return Object.keys(safe).length > 0 ? safe : undefined;
 }
@@ -122,6 +154,13 @@ function copySafeTextDiagnostic(source: Record<string, unknown>, target: Record<
   }
   const redacted = redactSensitiveText(value);
   if (redacted === value) {
+    target[key] = value;
+  }
+}
+
+function copyNonnegativeIntegerDiagnostic(source: Record<string, unknown>, target: Record<string, unknown>, key: string): void {
+  const value = source[key];
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
     target[key] = value;
   }
 }

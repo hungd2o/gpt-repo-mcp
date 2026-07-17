@@ -54,6 +54,7 @@ describe("tool catalog contracts", () => {
       "repo_tree",
       "repo_search",
       "repo_fetch_file",
+      "repo_get_image",
       "repo_read_many",
       "repo_git_status",
       "repo_git_diff",
@@ -869,6 +870,35 @@ describe("tool catalog contracts", () => {
             "warnings",
           ],
           "title": "Fetch one file",
+        },
+        {
+          "annotations": {
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false,
+            "readOnlyHint": true,
+          },
+          "description": "Use this when the user needs to inspect a repository screenshot, diagram, or static image. Returns one complete MCP image block, proportionally downscales large files, and can force JPEG for compact opaque previews, lossless PNG, or near-lossless WebP for efficient transparency.",
+          "inputKeys": [
+            "format",
+            "max_long_edge",
+            "path",
+            "repo_id",
+          ],
+          "name": "repo_get_image",
+          "outputKeys": [
+            "output_bytes",
+            "output_mime_type",
+            "rendered_height",
+            "rendered_width",
+            "scale",
+            "source_height",
+            "source_mime_type",
+            "source_width",
+            "transparency_mode",
+            "warnings",
+          ],
+          "title": "Get repository image",
         },
         {
           "annotations": {

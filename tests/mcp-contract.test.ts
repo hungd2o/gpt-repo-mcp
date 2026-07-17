@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import sharp from "sharp";
 import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
 import { SERVER_INSTRUCTIONS, createMcpServer } from "../src/register.js";
@@ -228,6 +229,35 @@ describe("MCP contract", () => {
               "warnings",
             ],
             "title": "Fetch one file",
+          },
+          {
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true,
+            },
+            "description": "Use this when the user needs to inspect a repository screenshot, diagram, or static image. Returns one complete MCP image block, proportionally downscales large files, and can force JPEG for compact opaque previews, lossless PNG, or near-lossless WebP for efficient transparency.",
+            "inputKeys": [
+              "format",
+              "max_long_edge",
+              "path",
+              "repo_id",
+            ],
+            "name": "repo_get_image",
+            "outputKeys": [
+              "output_bytes",
+              "output_mime_type",
+              "rendered_height",
+              "rendered_width",
+              "scale",
+              "source_height",
+              "source_mime_type",
+              "source_width",
+              "transparency_mode",
+              "warnings",
+            ],
+            "title": "Get repository image",
           },
           {
             "annotations": {
@@ -1000,6 +1030,34 @@ describe("MCP contract", () => {
     }
   });
 
+  test("repo_get_image returns one complete bounded image block", async () => {
+    const { client, close } = await connectFixtureServer();
+    try {
+      const result = await client.callTool({
+        name: "repo_get_image",
+        arguments: { repo_id: "fixture", path: "diagram.png" }
+      });
+      const content = (result as { content?: Array<{ type: string; data?: string; mimeType?: string }> }).content ?? [];
+      const image = content.find((item) => item.type === "image");
+
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({
+        transparency_mode: "preserved",
+        output_mime_type: "image/jpeg",
+        rendered_width: 120,
+        rendered_height: 80
+      });
+      expect(image).toMatchObject({ type: "image", mimeType: "image/jpeg", data: expect.any(String) });
+      if (image?.type === "image") {
+        expect(Buffer.from(image.data ?? "", "base64").toString("base64")).toBe(image.data);
+        expect(Buffer.byteLength(JSON.stringify(result), "utf8")).toBeLessThanOrEqual(12 * 1024 * 1024);
+        expect((await sharp(Buffer.from(image.data ?? "", "base64")).metadata()).format).toBe("jpeg");
+      }
+    } finally {
+      await close();
+    }
+  });
+
   test("repo_write_changes partial failure exposes safe diagnostics in error envelope", async () => {
     const { client, close } = await connectFixtureServer();
     try {
@@ -1230,9 +1288,16 @@ describe("MCP contract", () => {
         expect(definition, name).toBeDefined();
         const parsed = definition!.outputSchema.safeParse(result.structuredContent);
         expect(parsed.error?.issues, name).toBeUndefined();
-        expect(result.content, name).toEqual([
-          expect.objectContaining({ type: "text", text: expect.any(String) })
-        ]);
+        if (name === "repo_get_image") {
+          expect(result.content, name).toEqual([
+            expect.objectContaining({ type: "text", text: expect.any(String) }),
+            expect.objectContaining({ type: "image", data: expect.any(String), mimeType: "image/jpeg" })
+          ]);
+        } else {
+          expect(result.content, name).toEqual([
+            expect.objectContaining({ type: "text", text: expect.any(String) })
+          ]);
+        }
       }
     } finally {
       await close();
@@ -1247,6 +1312,7 @@ function representativeCalls(head: string): Record<string, Record<string, unknow
   repo_tree: { repo_id: "fixture", path: ".", max_depth: 2, page_size: 10 },
   repo_search: { repo_id: "fixture", query: "Fixture", max_results: 5 },
   repo_fetch_file: { repo_id: "fixture", path: "README.md", start_line: 1, end_line: 5 },
+  repo_get_image: { repo_id: "fixture", path: "diagram.png" },
   repo_read_many: { repo_id: "fixture", paths: ["README.md", "src/app.ts"], max_files: 2 },
   repo_git_status: { repo_id: "fixture" },
   repo_git_diff: { repo_id: "fixture" },
@@ -1370,6 +1436,7 @@ async function createRepoRoot() {
     }
   }, null, 2));
   await writeFile(join(root, "src", "app.ts"), "export const fixture = true;\n");
+  await sharp({ create: { width: 120, height: 80, channels: 3, background: "#4b5563" } }).png().toFile(join(root, "diagram.png"));
   await execFileAsync("git", ["init"], { cwd: root, env: { PATH: process.env.PATH ?? "" } });
   await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: root, env: { PATH: process.env.PATH ?? "" } });
   await execFileAsync("git", ["config", "user.name", "Test User"], { cwd: root, env: { PATH: process.env.PATH ?? "" } });

@@ -18,6 +18,25 @@ export const FetchFileInputSchema = RepoInputSchema.extend({
   override_default_excludes: z.boolean().optional()
 });
 
+export const RepoGetImageInputSchema = RepoInputSchema.extend({
+  path: z.string().min(1).describe("Repository-relative path to a static JPEG, PNG, or WebP image."),
+  max_long_edge: z.number().int().min(64).max(2560).optional().describe("Optional maximum rendered long edge in pixels; defaults to 2560 and never enlarges images."),
+  format: z.enum(["auto", "jpeg", "png", "webp"]).optional().describe("Optional forced output conversion. JPEG is compact for opaque images, PNG provides lossless encoding with alpha, and WebP uses near-lossless compression; auto selects JPEG or WebP from decoded opacity.")
+});
+
+export const ImageRenderResultSchema = z.object({
+  source_width: z.number().int().positive().describe("Original decoded image width in pixels."),
+  source_height: z.number().int().positive().describe("Original decoded image height in pixels."),
+  rendered_width: z.number().int().positive().describe("Delivered image width after proportional downscaling."),
+  rendered_height: z.number().int().positive().describe("Delivered image height after proportional downscaling."),
+  source_mime_type: z.string().describe("Detected source image MIME type."),
+  output_mime_type: z.string().describe("MIME type of the delivered image."),
+  output_bytes: z.number().int().nonnegative().describe("Encoded image bytes before Base64 transport encoding."),
+  scale: z.number().positive().max(1).describe("Uniform rendered-to-source scale; never exceeds one."),
+  transparency_mode: z.enum(["preserved", "flattened"]).describe("Whether meaningful source transparency was retained or visibly flattened."),
+  warnings: z.array(z.string()).describe("Safe rendering warnings, including an explicit flattening notice when relevant.")
+});
+
 export const ReadManyInputSchema = RepoInputSchema.extend({
   paths: z.array(z.string()).optional(),
   include_globs: z.array(z.string()).optional(),

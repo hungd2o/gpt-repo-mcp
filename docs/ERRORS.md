@@ -35,6 +35,11 @@ All tool errors return:
 | `SECRET_CANDIDATE_BLOCKED` | A file read was blocked because the path looks secret-sensitive, or a public environment template contains a secret-looking value. |
 | `DEFAULT_EXCLUDE_BLOCKED` | A file read was blocked by default exclude policy. |
 | `SIZE_LIMIT_EXCEEDED` | A file read exceeded the requested or configured byte limit. |
+| `IMAGE_UNSUPPORTED` | The image was not a supported static JPEG, PNG, or WebP file. |
+| `IMAGE_ANIMATION_UNSUPPORTED` | The image contained multiple pages or animation frames, which image previews do not support. |
+| `IMAGE_DECODE_FAILED` | The image could not be decoded safely. |
+| `IMAGE_RENDER_BUSY` | The bounded image-render queue is full; retry the read shortly. |
+| `IMAGE_RESULT_TOO_LARGE` | The rendered image could not fit the image transport or full response budget after proportional downscaling. Safe diagnostics may include source dimensions and a recommended `max_long_edge`. |
 | `WRITE_DISABLED` | A write was requested for a repo that has not enabled `writes.enabled`. |
 | `WRITE_DENIED_GLOB` | A write target matched a configured denied glob or secret-sensitive path. |
 | `WRITE_NOT_ALLOWED_GLOB` | A write target did not match the repo's configured allowed write globs. |

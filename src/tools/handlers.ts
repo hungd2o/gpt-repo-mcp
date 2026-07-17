@@ -5,6 +5,7 @@ import { CleanupService } from "../services/cleanup-service.js";
 import { RepoTreeService } from "../services/repo-tree-service.js";
 import { SearchService } from "../services/search-service.js";
 import { FileReader } from "../services/file-reader.js";
+import { ImageRenderService, MAX_IMAGE_RESULT_BYTES, type ImageRenderOptions } from "../services/image-render-service.js";
 import { GitService } from "../services/git-service.js";
 import { GitReviewService } from "../services/git-review-service.js";
 import { GitOperationsService } from "../services/git-operations-service.js";
@@ -24,7 +25,7 @@ import { FileWriter } from "../services/file-writer.js";
 import { WriteChangesService } from "../services/write-changes-service.js";
 import { WritePolicy } from "../services/write-policy.js";
 import { OperationReceiptService } from "../services/operation-receipt-service.js";
-import { createErrorEnvelope, createSuccessEnvelope } from "../runtime/result-envelope.js";
+import { createErrorEnvelope, createImageSuccessEnvelope, createSuccessEnvelope } from "../runtime/result-envelope.js";
 import { toRepoReaderError } from "../runtime/errors.js";
 import { audit } from "../runtime/telemetry.js";
 import type { RuntimeContext } from "../runtime/context.js";
@@ -112,6 +113,21 @@ export const fetchFileHandler: ToolHandler = async (input, context) => safeTool<
   const result = await new FileReader(new PathSandbox(repo.root)).read(args);
   audit({ tool: "repo_fetch_file", repo_id: args.repo_id, paths: [result.path], counts: { bytes: result.size_bytes }, truncated: result.truncated, warnings: result.warnings });
   return createSuccessEnvelope(result, `Read ${result.path}.`, { warnings: result.warnings });
+});
+
+export const getImageHandler: ToolHandler = async (input, context) => safeTool<ImageRenderOptions & RepoInput>("repo_get_image", input, context, async (args) => {
+  const repo = context.registry.get(args.repo_id);
+  const rendered = await new ImageRenderService(new PathSandbox(repo.root), repo.root).render(args);
+  const { bytes, mimeType, ...metadata } = rendered;
+  const summary = rendered.transparency_mode === "flattened"
+    ? "Returned one flattened checkerboard image preview; original repository image is unchanged."
+    : "Returned one complete proportionally rendered image.";
+  audit({ tool: "repo_get_image", repo_id: args.repo_id, counts: { bytes: rendered.output_bytes, width: rendered.rendered_width, height: rendered.rendered_height }, warnings: rendered.warnings });
+  return createImageSuccessEnvelope(metadata, summary, { data: bytes.toString("base64"), mimeType }, MAX_IMAGE_RESULT_BYTES, {
+    source_width: rendered.source_width,
+    source_height: rendered.source_height,
+    recommended_max_long_edge: Math.min(1024, Math.max(rendered.rendered_width, rendered.rendered_height))
+  });
 });
 
 export const readManyHandler: ToolHandler = async (input, context) => safeTool<ReadManyInput>("repo_read_many", input, context, async (args) => {

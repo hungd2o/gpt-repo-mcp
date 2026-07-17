@@ -129,6 +129,24 @@ Example:
 { "repo_id": "example-repo", "path": "src/instructions.ts", "start_line": 1, "end_line": 80 }
 ```
 
+### `repo_get_image`
+
+Returns one complete rendered preview of a static repository image. It accepts only static JPEG, PNG, and WebP files and applies the same approved-root, default-exclude, and secret-path policy as other reads.
+
+Input: `repo_id`, `path`, optional `max_long_edge` (integer 64–2560; defaults to 2560), and optional `format` (`auto`, `jpeg`, `png`, or `webp`).
+Output: source and rendered dimensions, source and output MIME types, output byte count, uniform `scale`, `transparency_mode`, and `warnings`, plus one Base64 image content block.
+
+Rendering is orientation-aware, proportional, uncropped, and never enlarges an image. The encoded image must fit a 9 MiB Base64 transport budget; the complete serialized tool result must fit a 12 MiB response budget.
+
+`auto` (default) detects opacity from decoded pixels: opaque images use JPEG and meaningful transparency uses near-lossless WebP. `jpeg` forces a compact opaque preview and flattens meaningful transparency onto the labelled checkerboard. `png` forces lossless PNG encoding with alpha preservation. `webp` forces near-lossless WebP encoding with alpha preservation; lossless WebP is never used.
+
+If `auto` cannot fit a transparency-preserving render after proportional downscaling, it returns the labelled checkerboard JPEG preview. Forced PNG or WebP never changes MIME type: if that selected format cannot fit, the tool returns `IMAGE_RESULT_TOO_LARGE`. The original repository image is never changed.
+Example:
+
+```json
+{ "repo_id": "example-repo", "path": "docs/architecture.png", "format": "auto" }
+```
+
 ### `repo_read_many`
 
 Reads bounded explicit paths or glob matches. It enforces file and byte limits and reports skipped files with reasons.
